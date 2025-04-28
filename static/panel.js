@@ -517,7 +517,7 @@ $(".tab-button").each((i, tab) => {
     });
 });
 userTokenInput.change(() => {
-    settings.credentials.token = userTokenInput.val();
+    settings.credentials.token = userTokenInput.val().replace(/"/g, "");
     saveSettings();
 });
 checkTokenButton.click(() => {
