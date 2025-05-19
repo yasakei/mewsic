@@ -39,7 +39,7 @@ export class PlaybackStateUpdater {
             }
         })
 
-        if (request.status === 401) return await SpotifyService.refresh()
+        if (request.status === 401 || request.status === 400) return await SpotifyService.refresh()
         if (request.status === 200) {
             const json = await request.json() as PlaybackResponse
             const playbackState = this.playbackState

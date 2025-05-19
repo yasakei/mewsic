@@ -13,8 +13,15 @@ $(`
                     <button id="check-token" class="button1">Check</button>
                 </div>
                 <div class="option">
-                    <label for="spotify-cookies">Cookies:</label>
-                    <textarea rows="3" cols="40" id="spotify-cookies" class="text-input2"></textarea>
+                    <label for="client-id">Client ID:</label>
+                    <input type="text" id="client-id" class="text-input1">
+                </div>
+                <div class="option">
+                    <label for="client-secret">Client secret:</label>
+                    <input type="text" id="client-secret" class="text-input1">
+                </div>
+                <div class="option">
+                    <button id="authorize-spotify" class="button1">Authorize Spotify</button>
                 </div>
             </div>
             <div class="settings">
@@ -444,7 +451,9 @@ $(`
 let menu                    = $("#menu-UI"),
     userTokenInput          = $("#user-token"),
     checkTokenButton        = $("#check-token"),
-    cookiesInput            = $("#spotify-cookies"),
+    clientIDInput           = $("#client-id"),
+    clientSecretInput       = $("#client-secret"),
+    authorizeButton         = $("#authorize-spotify"),
     enableTimestampCheckbox = $("#enable-timestamp"),
     enableLabelCheckbox     = $("#enable-label"),
     statusPreview           = $("#status-preview"),
@@ -465,7 +474,9 @@ let menu                    = $("#menu-UI"),
 let settings = {
     credentials: {
         token: "",
-        cookies: ""
+        cookies: "",
+        clientID: "",
+        clientSecret: ""
     },
     view: {
         timestamp: true,
@@ -530,9 +541,16 @@ checkTokenButton.click(() => {
     if(!valid) return modal("Token check", "Token is invalid.", { descriptionTextColor: "rgba(200, 0, 0, var(--alpha))" });
     modal("Token check", "Token is valid.", { descriptionTextColor: "rgba(0, 200, 0, var(--alpha))" });
 });
-cookiesInput.change(() => {
-    settings.credentials.cookies = cookiesInput.val();
+clientIDInput.change(() => {
+    settings.credentials.clientID = clientIDInput.val();
     saveSettings();
+});
+clientSecretInput.change(() => {
+    settings.credentials.clientSecret = clientSecretInput.val();
+    saveSettings();
+});
+authorizeButton.click(() => {
+    window.open(`https://accounts.spotify.com/authorize?client_id=${settings.credentials.clientID}&response_type=code&redirect_uri=${encodeURIComponent("http://localhost:8999/callback")}&scope=${encodeURIComponent("user-read-playback-state user-read-currently-playing")}`, '_blank');
 });
 enableTimestampCheckbox.click(() => {
     settings.view.timestamp = enableTimestampCheckbox.prop("checked");
@@ -677,7 +695,8 @@ function loadSettings(settingsToLoad) {
 
     try {
         userTokenInput.val(settings.credentials.token);
-        cookiesInput.val(settings.credentials.cookies);
+        clientIDInput.val(settings.credentials.clientID);
+        clientSecretInput.val(settings.credentials.clientSecret);
         enableTimestampCheckbox.prop("checked", settings.view.timestamp);
         enableLabelCheckbox.prop("checked", settings.view.label);
         settings.view.advanced.enabled ? enableAdvancedSWT.click() : null;

@@ -3,6 +3,7 @@ import { createServer } from "node:http"
 import { WebSocketServer } from "ws"
 import { join } from "node:path"
 import { Settings } from "../Settings"
+import { SpotifyService } from "../SpotifyService"
 
 export function startServer(): void {
     const app = express()
@@ -16,6 +17,16 @@ export function startServer(): void {
 
     app.get("/", (req, res) => {
         res.sendFile(join(__dirname, "../../static/index.html"))
+    })
+
+    app.get("/callback", (req, res) => {
+        if (!req.query.code) return res.sendStatus(401)
+
+        const code = req.query.code
+        Settings.credentials.code = code as string
+        SpotifyService.exchange().then(() => Settings.save())
+
+        res.sendStatus(200)
     })
 
     wss.on("connection", (ws) => {

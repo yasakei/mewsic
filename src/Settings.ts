@@ -4,7 +4,11 @@ import { Debug } from "./Debug"
 export class Settings {
     public static credentials = {
         token: "",
-        cookies: ""
+        cookies: "",
+        clientID: "",
+        clientSecret: "",
+        code: "",
+        refreshToken: ""
     }
 
     public static view = {
