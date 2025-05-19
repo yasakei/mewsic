@@ -31,7 +31,11 @@ class Settings {
 exports.Settings = Settings;
 Settings.credentials = {
     token: "",
-    cookies: ""
+    cookies: "",
+    clientID: "",
+    clientSecret: "",
+    code: "",
+    refreshToken: ""
 };
 Settings.view = {
     timestamp: true,

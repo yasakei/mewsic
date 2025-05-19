@@ -25,7 +25,7 @@ class PlaybackStateUpdater {
                     "Authorization": "Bearer " + SpotifyService_1.SpotifyService.token
                 }
             });
-            if (request.status === 401)
+            if (request.status === 401 || request.status === 400)
                 return yield SpotifyService_1.SpotifyService.refresh();
             if (request.status === 200) {
                 const json = yield request.json();
