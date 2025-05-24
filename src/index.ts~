@@ -11,7 +11,6 @@ import { Settings } from "./Settings"
 import { Updater } from "./Updater"
 import { SpotifyService } from "./SpotifyService"
 import { v4 as uuidv4 } from "uuid"
-import { ExternalAuthServerAPI } from "./ExternalAuthServerAPI"
 
 Settings.load()
 
@@ -35,7 +34,6 @@ function init(): void {
 
         Settings.save()
     }
-    ExternalAuthServerAPI.register()
 
     SpotifyService.refresh()
 
@@ -54,7 +52,7 @@ function init(): void {
 
         //console.log(playbackState)
         //console.log(statusChanger, playbackStateUpdater, SpotifyAccessToken)
-    }, 5000)
+    }, 1500)
 
     let now = Date.now()
     setInterval(() => {
@@ -64,14 +62,14 @@ function init(): void {
 
         if (playbackState.ended) statusChanger.songChanged()
 
-        console.clear()
+        /*console.clear()
         console.log(`
     Song: ${playbackState.songName || "Not listening"}
     Author: ${playbackState.songAuthor || "Not listening"}
     Song progress: ${statusChanger.formatSeconds(+(playbackState.songProgress / 1000).toFixed(0))}
     Current lyrics: ${(playbackState.currentLine && playbackState.currentLine.text) || "Not available"}
     Lyrics fetched from: ${lyricsFetcher.lastFetchedFrom}
-    `)
+    `)*/
 
         now = Date.now()
     }, 1000 / 60)

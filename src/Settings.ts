@@ -7,8 +7,10 @@ export class Settings {
         cookies: "",
         clientID: "",
         clientSecret: "",
+        useExternalAuthServer: "",
         code: "",
-        refreshToken: ""
+        refreshToken: "",
+        uuid: ""
     }
 
     public static view = {

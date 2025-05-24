@@ -23,6 +23,10 @@ $(`
                 <div class="option">
                     <button id="authorize-spotify" class="button1">Authorize Spotify</button>
                 </div>
+                <div class="option">
+                    <label for="use-external-auth-server">Use external auth server</label>
+                    <input type="checkbox" id="use-external-auth-server">
+                </div>
             </div>
             <div class="settings">
                 <span class="settings-name">Status view</span>
@@ -453,6 +457,7 @@ let menu                    = $("#menu-UI"),
     checkTokenButton        = $("#check-token"),
     clientIDInput           = $("#client-id"),
     clientSecretInput       = $("#client-secret"),
+    useExternalAuthServer   = $("#use-external-auth-server"),
     authorizeButton         = $("#authorize-spotify"),
     enableTimestampCheckbox = $("#enable-timestamp"),
     enableLabelCheckbox     = $("#enable-label"),
@@ -476,7 +481,9 @@ let settings = {
         token: "",
         cookies: "",
         clientID: "",
-        clientSecret: ""
+        clientSecret: "",
+        useExternalAuthServer: false,
+        uuid: ""
     },
     view: {
         timestamp: true,
@@ -550,8 +557,18 @@ clientSecretInput.change(() => {
     saveSettings();
 });
 authorizeButton.click(() => {
-    window.open(`https://accounts.spotify.com/authorize?client_id=${settings.credentials.clientID}&response_type=code&redirect_uri=${encodeURIComponent("http://localhost:8999/callback")}&scope=${encodeURIComponent("user-read-playback-state user-read-currently-playing")}`, '_blank');
+    const clientId = settings.credentials.clientID;
+    const redirectUri = "http://localhost:8999/callback"
+    if (settings.credentials.useExternalAuthServer) {
+        window.open("https://rocky-quintessential-island.glitch.me/login/" + settings.credentials.uuid, "_blank")
+    } else {
+        window.open(`https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent("user-read-playback-state user-read-currently-playing")}`, '_blank');
+    }
 });
+useExternalAuthServer.click(() => {
+    settings.credentials.useExternalAuthServer = useExternalAuthServer.prop("checked");
+    saveSettings();
+})
 enableTimestampCheckbox.click(() => {
     settings.view.timestamp = enableTimestampCheckbox.prop("checked");
     saveSettings();
@@ -697,6 +714,7 @@ function loadSettings(settingsToLoad) {
         userTokenInput.val(settings.credentials.token);
         clientIDInput.val(settings.credentials.clientID);
         clientSecretInput.val(settings.credentials.clientSecret);
+        useExternalAuthServer.prop("checked", settings.credentials.useExternalAuthServer)
         enableTimestampCheckbox.prop("checked", settings.view.timestamp);
         enableLabelCheckbox.prop("checked", settings.view.label);
         settings.view.advanced.enabled ? enableAdvancedSWT.click() : null;

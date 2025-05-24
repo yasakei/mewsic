@@ -1,6 +1,8 @@
 import { PlaybackState } from "./PlaybackState"
 import { LyricsFetcher } from "./LyricsFetcher"
 import { SpotifyService } from "./SpotifyService"
+import { Settings } from "./Settings"
+import { ExternalAuthServerAPI } from "./ExternalAuthServerAPI"
 
 interface PlaybackResponse {
     item: {
@@ -39,7 +41,13 @@ export class PlaybackStateUpdater {
             }
         })
 
-        if (request.status === 401 || request.status === 400) return await SpotifyService.refresh()
+        if (request.status === 401 || request.status === 400) {
+            if (Settings.credentials.useExternalAuthServer) {
+                SpotifyService.token = await ExternalAuthServerAPI.getToken() || ""
+            } else {
+                return await SpotifyService.refresh()
+            }
+        }
         if (request.status === 200) {
             const json = await request.json() as PlaybackResponse
             const playbackState = this.playbackState

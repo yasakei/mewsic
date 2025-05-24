@@ -20,13 +20,22 @@ export function startServer(): void {
     })
 
     app.get("/callback", (req, res) => {
-        if (!req.query.code) return res.sendStatus(401)
+        if (Settings.credentials.useExternalAuthServer) {
+            if (!req.query.refresh_token) return res.sendStatus(401)
 
-        const code = req.query.code
-        Settings.credentials.code = code as string
-        SpotifyService.exchange().then(() => Settings.save())
+            const refreshToken = req.query.refresh_token
+            console.log(refreshToken)
+            Settings.credentials.refreshToken = refreshToken as string
+            Settings.save()
+        } else {
+            if (!req.query.code) return res.sendStatus(401)
 
-        res.sendStatus(200)
+            const code = req.query.code
+            Settings.credentials.code = code as string
+            SpotifyService.exchange().then(() => Settings.save())
+        }
+
+        res.send("OK. You can close this page now.")
     })
 
     wss.on("connection", (ws) => {
