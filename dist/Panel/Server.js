@@ -22,12 +22,22 @@ function startServer() {
         res.sendFile((0, node_path_1.join)(__dirname, "../../static/index.html"));
     });
     app.get("/callback", (req, res) => {
-        if (!req.query.code)
-            return res.sendStatus(401);
-        const code = req.query.code;
-        Settings_1.Settings.credentials.code = code;
-        SpotifyService_1.SpotifyService.exchange().then(() => Settings_1.Settings.save());
-        res.sendStatus(200);
+        if (Settings_1.Settings.credentials.useExternalAuthServer) {
+            if (!req.query.refresh_token)
+                return res.sendStatus(401);
+            const refreshToken = req.query.refresh_token;
+            console.log(refreshToken);
+            Settings_1.Settings.credentials.refreshToken = refreshToken;
+            Settings_1.Settings.save();
+        }
+        else {
+            if (!req.query.code)
+                return res.sendStatus(401);
+            const code = req.query.code;
+            Settings_1.Settings.credentials.code = code;
+            SpotifyService_1.SpotifyService.exchange().then(() => Settings_1.Settings.save());
+        }
+        res.send("OK. You can close this page now.");
     });
     wss.on("connection", (ws) => {
         ws.on("message", (data) => {

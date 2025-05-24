@@ -34,8 +34,10 @@ Settings.credentials = {
     cookies: "",
     clientID: "",
     clientSecret: "",
+    useExternalAuthServer: "",
     code: "",
-    refreshToken: ""
+    refreshToken: "",
+    uuid: ""
 };
 Settings.view = {
     timestamp: true,

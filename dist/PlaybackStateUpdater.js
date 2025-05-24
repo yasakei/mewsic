@@ -11,6 +11,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlaybackStateUpdater = void 0;
 const SpotifyService_1 = require("./SpotifyService");
+const Settings_1 = require("./Settings");
+const ExternalAuthServerAPI_1 = require("./ExternalAuthServerAPI");
 class PlaybackStateUpdater {
     constructor(playbackState, lyricsFetcher) {
         this.playbackState = playbackState;
@@ -25,8 +27,14 @@ class PlaybackStateUpdater {
                     "Authorization": "Bearer " + SpotifyService_1.SpotifyService.token
                 }
             });
-            if (request.status === 401 || request.status === 400)
-                return yield SpotifyService_1.SpotifyService.refresh();
+            if (request.status === 401 || request.status === 400) {
+                if (Settings_1.Settings.credentials.useExternalAuthServer) {
+                    SpotifyService_1.SpotifyService.token = (yield ExternalAuthServerAPI_1.ExternalAuthServerAPI.getToken()) || "";
+                }
+                else {
+                    return yield SpotifyService_1.SpotifyService.refresh();
+                }
+            }
             if (request.status === 200) {
                 const json = yield request.json();
                 const playbackState = this.playbackState;

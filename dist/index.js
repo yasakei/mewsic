@@ -12,6 +12,8 @@ const Server_1 = require("./Panel/Server");
 const Settings_1 = require("./Settings");
 const Updater_1 = require("./Updater");
 const SpotifyService_1 = require("./SpotifyService");
+const uuid_1 = require("uuid");
+const ExternalAuthServerAPI_1 = require("./ExternalAuthServerAPI");
 Settings_1.Settings.load();
 if (Settings_1.Settings.update.enableAutoupdate) {
     Updater_1.Updater.tryUpdate()
@@ -27,6 +29,11 @@ else {
     init();
 }
 function init() {
+    if (!Settings_1.Settings.credentials.uuid) {
+        Settings_1.Settings.credentials.uuid = (0, uuid_1.v4)();
+        Settings_1.Settings.save();
+    }
+    ExternalAuthServerAPI_1.ExternalAuthServerAPI.register();
     SpotifyService_1.SpotifyService.refresh();
     const lyricsFetcher = new LyricsFetcher_1.LyricsFetcher();
     lyricsFetcher.addSource(new SpotifySource_1.SpotifySource());
@@ -39,7 +46,7 @@ function init() {
         playbackStateUpdater.update();
         //console.log(playbackState)
         //console.log(statusChanger, playbackStateUpdater, SpotifyAccessToken)
-    }, 1500);
+    }, 5000);
     let now = Date.now();
     setInterval(() => {
         statusChanger.changeStatus();
