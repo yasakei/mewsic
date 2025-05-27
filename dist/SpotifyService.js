@@ -23,7 +23,7 @@ class SpotifyService {
                     client_id: Settings_1.Settings.credentials.clientID,
                     grant_type: "authorization_code",
                     code: Settings_1.Settings.credentials.code,
-                    redirect_uri: "http://localhost:8999/callback"
+                    redirect_uri: Settings_1.Settings.credentials.customRedirectUri
                 }).toString(),
                 "method": "POST"
             });
@@ -44,7 +44,7 @@ class SpotifyService {
                 body: new URLSearchParams({
                     grant_type: "refresh_token",
                     refresh_token: Settings_1.Settings.credentials.refreshToken,
-                    redirect_uri: "http://localhost:8999/callback"
+                    redirect_uri: Settings_1.Settings.credentials.customRedirectUri
                 }).toString(),
                 "method": "POST"
             });

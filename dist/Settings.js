@@ -37,7 +37,8 @@ Settings.credentials = {
     useExternalAuthServer: "",
     code: "",
     refreshToken: "",
-    uuid: ""
+    uuid: "",
+    customRedirectUri: ""
 };
 Settings.view = {
     timestamp: true,
