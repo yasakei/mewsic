@@ -10,7 +10,8 @@ export class Settings {
         useExternalAuthServer: "",
         code: "",
         refreshToken: "",
-        uuid: ""
+        uuid: "",
+        customRedirectUri: ""
     }
 
     public static view = {

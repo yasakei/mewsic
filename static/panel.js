@@ -21,6 +21,10 @@ $(`
                     <input type="text" id="client-secret" class="text-input1">
                 </div>
                 <div class="option">
+                    <label for="custom-redirect-uri">Type your redirect URI that you added to your app:</label>
+                    <input type="text" id="custom-redirect-uri" class="text-input1">
+                </div>
+                <div class="option">
                     <button id="authorize-spotify" class="button1">Authorize Spotify</button>
                 </div>
                 <div class="option">
@@ -457,6 +461,7 @@ let menu                    = $("#menu-UI"),
     checkTokenButton        = $("#check-token"),
     clientIDInput           = $("#client-id"),
     clientSecretInput       = $("#client-secret"),
+    customRedirectUriInput  = $("#custom-redirect-uri"),
     useExternalAuthServer   = $("#use-external-auth-server"),
     authorizeButton         = $("#authorize-spotify"),
     enableTimestampCheckbox = $("#enable-timestamp"),
@@ -483,7 +488,8 @@ let settings = {
         clientID: "",
         clientSecret: "",
         useExternalAuthServer: false,
-        uuid: ""
+        uuid: "",
+        customRedirectUri: ""
     },
     view: {
         timestamp: true,
@@ -556,9 +562,13 @@ clientSecretInput.change(() => {
     settings.credentials.clientSecret = clientSecretInput.val();
     saveSettings();
 });
+customRedirectUriInput.change(() => {
+    settings.credentials.customRedirectUri = customRedirectUriInput.val();
+    saveSettings();
+});
 authorizeButton.click(() => {
     const clientId = settings.credentials.clientID;
-    const redirectUri = "http://localhost:8999/callback"
+    const redirectUri = settings.credentials.customRedirectUri;
     if (settings.credentials.useExternalAuthServer) {
         window.open("https://rocky-quintessential-island.glitch.me/login/" + settings.credentials.uuid, "_blank")
     } else {
@@ -714,6 +724,7 @@ function loadSettings(settingsToLoad) {
         userTokenInput.val(settings.credentials.token);
         clientIDInput.val(settings.credentials.clientID);
         clientSecretInput.val(settings.credentials.clientSecret);
+        customRedirectUriInput.val(settings.credentials.customRedirectUri);
         useExternalAuthServer.prop("checked", settings.credentials.useExternalAuthServer)
         enableTimestampCheckbox.prop("checked", settings.view.timestamp);
         enableLabelCheckbox.prop("checked", settings.view.label);
