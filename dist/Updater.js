@@ -68,7 +68,7 @@ class Updater {
             yield new Promise((res, rej) => {
                 stream_1.Readable.fromWeb(response.body)
                     .pipe(downloadStream)
-                    .on("finish", res);
+                    .on("finish", () => res());
             });
             const file = new node_stream_zip_1.default.async({ file: downloadPath });
             yield file.extract(null, outputDir);

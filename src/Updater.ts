@@ -63,6 +63,7 @@ export class Updater {
             Readable.fromWeb(response.body!)
             .pipe(downloadStream)
             .on("finish", () => res())
+           })
 
         const file = new zip.async({ file: downloadPath })
 

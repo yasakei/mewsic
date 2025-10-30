@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const LyricsFetcher_1 = require("./LyricsFetcher");
 const SpotifySource_1 = require("./Sources/SpotifySource");
 const NetEaseMusicSource_1 = require("./Sources/NetEaseMusicSource");
+const LrcLibSource_1 = require("./Sources/LrcLibSource");
 const QQMusicSource_1 = require("./Sources/QQMusicSource");
 const PlaybackStateUpdater_1 = require("./PlaybackStateUpdater");
 const PlaybackState_1 = require("./PlaybackState");
@@ -37,6 +38,7 @@ function init() {
     SpotifyService_1.SpotifyService.refresh();
     const lyricsFetcher = new LyricsFetcher_1.LyricsFetcher();
     lyricsFetcher.addSource(new SpotifySource_1.SpotifySource());
+    lyricsFetcher.addSource(new LrcLibSource_1.LrcLibSource());
     lyricsFetcher.addSource(new NetEaseMusicSource_1.NetEaseMusicSource());
     lyricsFetcher.addSource(new QQMusicSource_1.QQMusicSource());
     const playbackState = new PlaybackState_1.PlaybackState();

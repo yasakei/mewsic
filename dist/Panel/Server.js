@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.startServer = void 0;
+exports.startServer = startServer;
 const express_1 = __importDefault(require("express"));
 const node_http_1 = require("node:http");
 const ws_1 = require("ws");
@@ -59,4 +59,3 @@ function startServer() {
     });
     httpServer.listen(8999);
 }
-exports.startServer = startServer;
