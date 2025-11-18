@@ -34,8 +34,29 @@ export function startServer(): void {
             Settings.credentials.code = code as string
             SpotifyService.exchange().then(() => Settings.save())
         }
-
-        res.send("OK. You can close this page now.")
+        res.send(`<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Spotify authorization complete</title>
+        <script>
+            // Try to close the popup window once the callback has been received
+            (function () {
+                try {
+                    // If this window was opened by another page, attempt to close it
+                    if (window.opener && !window.opener.closed) {
+                        window.close();
+                    }
+                } catch (e) {
+                    // Ignore cross-origin or other errors
+                }
+            })();
+        </script>
+    </head>
+    <body>
+        <p>Authorization complete. This window should close automatically. If it doesn't, you can close it now.</p>
+    </body>
+    </html>`)
     })
 
     wss.on("connection", (ws) => {

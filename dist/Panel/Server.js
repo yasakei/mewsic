@@ -30,14 +30,36 @@ function startServer() {
             Settings_1.Settings.credentials.refreshToken = refreshToken;
             Settings_1.Settings.save();
         }
-        else {
-            if (!req.query.code)
-                return res.sendStatus(401);
-            const code = req.query.code;
-            Settings_1.Settings.credentials.code = code;
-            SpotifyService_1.SpotifyService.exchange().then(() => Settings_1.Settings.save());
-        }
-        res.send("OK. You can close this page now.");
+                else {
+                        if (!req.query.code)
+                                return res.sendStatus(401);
+                        const code = req.query.code;
+                        Settings_1.Settings.credentials.code = code;
+                        SpotifyService_1.SpotifyService.exchange().then(() => Settings_1.Settings.save());
+                }
+                res.send(`<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Spotify authorization complete</title>
+        <script>
+            // Try to close the popup window once the callback has been received
+            (function () {
+                try {
+                    // If this window was opened by another page, attempt to close it
+                    if (window.opener && !window.opener.closed) {
+                        window.close();
+                    }
+                } catch (e) {
+                    // Ignore cross-origin or other errors
+                }
+            })();
+        </script>
+    </head>
+    <body>
+        <p>Authorization complete. This window should close automatically. If it doesn't, you can close it now.</p>
+    </body>
+    </html>`);
     });
     wss.on("connection", (ws) => {
         ws.on("message", (data) => {
