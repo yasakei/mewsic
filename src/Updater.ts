@@ -59,11 +59,11 @@ export class Updater {
         const response = await fetch(url)
         const downloadStream = createWriteStream(downloadPath)
 
-        await new Promise((res, rej) => {
+        await new Promise<void>((res, rej) => {
             Readable.fromWeb(response.body!)
-                .pipe(downloadStream)
-                .on("finish", res)
-        })
+            .pipe(downloadStream)
+            .on("finish", () => res())
+           })
 
         const file = new zip.async({ file: downloadPath })
 

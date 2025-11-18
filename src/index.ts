@@ -1,6 +1,7 @@
 import { LyricsFetcher } from "./LyricsFetcher"
 import { SpotifySource} from "./Sources/SpotifySource"
 import { NetEaseMusicSource } from "./Sources/NetEaseMusicSource"
+import { LrcLibSource } from "./Sources/LrcLibSource"
 import { QQMusicSource } from "./Sources/QQMusicSource"
 import { PlaybackStateUpdater } from "./PlaybackStateUpdater"
 import { PlaybackState } from "./PlaybackState"
@@ -41,6 +42,7 @@ function init(): void {
 
     const lyricsFetcher = new LyricsFetcher()
     lyricsFetcher.addSource(new SpotifySource())
+    lyricsFetcher.addSource(new LrcLibSource())
     lyricsFetcher.addSource(new NetEaseMusicSource())
     lyricsFetcher.addSource(new QQMusicSource())
 
