@@ -2,91 +2,102 @@
 
 ## What is it?
 
-LyricsStatus is a tool that changes your Discord status to lyrics of songs you listen to on Spotify!
+LyricsStatus is a tool that changes your Discord custom status to the synced lyrics of the song you're currently listening to on Spotify.
 
-It is written in TypeScript and runs on Node.js.
+It is written in TypeScript and runs on Node.js. No Spotify developer account, no OAuth setup, no cookies — just your Discord token.
+
+## How it works
+
+LyricsStatus fetches your current Spotify playback state using the Spotify access token that Discord already holds internally (from your connected Spotify account). It then fetches synced lyrics from free sources and updates your Discord custom status line by line in real time.
 
 ## Precautions
 
-Before you proceed to [Setup](#Setup) please read those precautions.
+This tool is provided "AS IS" without any warranty that it will work on your machine.
 
-This tool is provided "AS IS" and doesn't have any warranty that it will work on your machine.
-
-I, creator of the LyricsStatus, am not responsible for any consequences that LyricsStatus can lead to.
+The creator of LyricsStatus is not responsible for any consequences that may arise from its use.
 
 By using it, you agree with the statements above.
 
+## Requirements
+
+- [Node.js](https://nodejs.org/en) v17 or higher
+- A Discord account with **Spotify connected** (Settings → Connections)
+- Spotify playing on any device
+
 ## Setup
 
-### Node.js
+### 1. Download
 
-Firstly, you need to [download](https://nodejs.org/en) Node.js.
-
-LyricsStatus needs version 17.x.x or higher.
-
-### Downloading LyricsStatus
-
-You can download it using Git or going to [Releases](https://github.com/OvalQuilter/lyrics-status/releases) and downloading source code archive. Then unpack it to the place you want.
-
-For Git, use this command:
+Clone the repo or download the source archive from [Releases](https://github.com/OvalQuilter/lyrics-status/releases):
 
 ```
-git clone --single-branch --branch v3 https://github.com/OvalQuilter/lyrics-status
+git clone https://github.com/OvalQuilter/lyrics-status
 ```
 
-### Locating to LyricsStatus
-
-#### Windows & Linux
-
-Copy the path to the LyricsStatus folder, often found on top of your File Explorer (`C:\Users\your_profile_name\path\to\LyricsStatus` or `/usr/name/path/to/LyricsStatus` for example).
-
-For Windows, press `Win + R` and type `cmd`, then press `Run`.
-
-For Linux, you need to manually open Terminal from your start menu.
-
-In the opened window type `cd paste_path_you_copied` and press `Enter`.
-
-### Installing modules
-
-Now, you need to install modules. In the command prompt, run the following command:
+### 2. Install dependencies
 
 ```
 npm install
 ```
 
-Then wait for modules to install.
+### 3. Build
 
-### Running and configuring
+```
+npm run build
+```
 
-Run `npm run start` to start LyricsStatus.
+### 4. Run
 
-Now you need to configure it. Open `localhost:8999` in your browser, you should see a menu with various settings.
+```
+npm start
+```
 
-First, you need to get your Discord token. [Here's](https://www.youtube.com/watch?v=LnBnm_tZlyU) a nice video on how to do it.
+### 5. Configure
 
-After getting your token you need to paste it, head back to the menu and paste it in the `Token` input field. Remove quotes if there are any.
+Open `http://localhost:8999` in your browser. You'll see the settings panel.
 
-Second, you need to get your Spotify cookies. Open [Spotify](https://open.spotify.com/) in your browser, then press `F12` or `Ctrl + Alt + I`, depending on your browser.
+**Discord token** — the only credential you need. Here's [a video](https://www.youtube.com/watch?v=LnBnm_tZlyU) showing how to get it. Paste it into the Discord token field and click Check to verify it works.
 
-Head to the `Network` tab or similar, you should see something like this:
+That's it. Play a song on Spotify and your Discord status will start updating with synced lyrics within a few seconds.
 
-![Network Tab](res/network_tab.png)
+## Settings
 
-Now reload the page, wait for it to load, and search for something like `open.spotify.com` (often it's appear on top):
+| Setting | Description |
+|---|---|
+| Discord token | Your Discord user token. Used to read your Spotify connection and update your status. |
+| Show playback timestamp | Prepends `[m:ss]` to the status text. |
+| Show label | Prepends `Song lyrics -` to the status text. |
+| Custom status template | Advanced mode — build your own status string using placeholders (see below). |
+| Send time offset | How many ms ahead of the lyric timestamp to send the status update. Default 500. |
+| Autooffset | Automatically calculates the offset based on Discord API response times. |
 
-![Request](res/request.png)
+### Custom status placeholders
 
-Click on it, in the opened window search for `Cookie:`, it's your cookies. Copy and paste them in `Cookie` input field in the menu.
+`{lyrics}`, `{lyrics_upper}`, `{lyrics_lower}`, `{lyrics_letters_only}`  
+`{song_name}`, `{song_name_cropped}`, `{song_name_upper}`, `{song_name_lower}`  
+`{song_author}`, `{song_author_upper}`, `{song_author_lower}`  
+`{timestamp}`
 
-Start some song in Spotify, if it has lyrics, you should see current lyrics in your command prompt as well as in your Discord status.
+Status text is automatically cropped to 128 characters (Discord's limit).
 
-### Troubleshooting
+## Lyrics sources
 
-#### Windows
+Lyrics are fetched in this order, falling back to the next if one fails:
 
-Try running command line with administrator privileges or disabling your firewall.
+1. **LrcLib** — best coverage for synced LRC lyrics
+2. **NetEase Music** — large catalogue, good for non-English tracks
+3. **QQ Music** — last resort fallback
 
-#### Linux
+Fetched lyrics are cached locally in `./cache/` to avoid redundant requests.
 
-Try running Terminal from `su` user.
+## Troubleshooting
 
+**Status not updating** — make sure Spotify is connected to your Discord account under Settings → Connections, and that you have a song actively playing (not paused).
+
+**Token invalid** — use the Check button in the settings panel to verify your Discord token is correct.
+
+**No lyrics found** — the song may not be in any of the lyrics databases, or only has unsynced lyrics. LyricsStatus requires time-synced lyrics to work.
+
+**Windows** — try running the command prompt with administrator privileges or temporarily disabling your firewall.
+
+**Linux** — try running the terminal as root if you hit permission issues.

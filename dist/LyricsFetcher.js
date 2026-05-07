@@ -11,51 +11,68 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LyricsFetcher = void 0;
 const fs_1 = require("fs");
+// ─── LyricsFetcher ────────────────────────────────────────────────────────────
+/**
+ * Tries each registered {@link BaseSource} in order until one returns synced
+ * lyrics. Results are cached to disk under `./cache/` to avoid redundant
+ * network requests on repeated plays.
+ */
 class LyricsFetcher {
     constructor() {
         this.sources = [];
+        /** Human-readable name of the source that provided the last result. */
         this.lastFetchedFrom = "Not fetched";
+        /** `name + artist` key of the last fetch attempt (used to detect mid-fetch song switches). */
         this.lastFetchedFor = "";
     }
+    // ── Source registration ───────────────────────────────────────────────────
     addSource(source) {
         this.sources.push(source);
     }
+    // ── Fetch ─────────────────────────────────────────────────────────────────
+    /**
+     * Returns synced lyrics for the given track, or `null` if no source has them.
+     * Checks the disk cache first before hitting any network source.
+     */
     fetchLyrics(name, artist) {
         return __awaiter(this, void 0, void 0, function* () {
             this.lastFetchedFrom = "Not fetched";
-            const cache = this.fetchCachedLyrics(name, artist);
-            let result = cache;
-            for (const source of this.sources) {
-                if (cache) {
-                    this.lastFetchedFrom = `Cache (${cache.appName})`;
-                    break;
-                }
-                try {
-                    this.lastFetchedFor = name + artist;
-                    result = yield source.getLyrics(name, artist);
-                    this.lastFetchedFrom = source.getAppName();
-                    this.cacheLyrics(name, artist, result, this.lastFetchedFrom);
-                }
-                catch (_a) { }
-                if (result)
-                    break;
+            this.lastFetchedFor = name + artist;
+            const cached = this.readCache(name, artist);
+            if (cached) {
+                this.lastFetchedFrom = `Cache (${cached.appName})`;
+                return cached;
             }
-            return result;
+            for (const source of this.sources) {
+                try {
+                    const lyrics = yield source.getLyrics(name, artist);
+                    this.lastFetchedFrom = source.getAppName();
+                    this.writeCache(name, artist, lyrics, source.getAppName());
+                    return lyrics;
+                }
+                catch (_a) {
+                    // Source failed — try the next one
+                }
+            }
+            return null;
         });
     }
-    fetchCachedLyrics(name, artist) {
-        const path = `./cache/${name}-${artist}.json`;
-        let lyrics = null;
-        try {
-            lyrics = JSON.parse((0, fs_1.readFileSync)(path).toString());
-        }
-        catch (_a) { }
-        return lyrics;
+    // ── Cache ─────────────────────────────────────────────────────────────────
+    cachePath(name, artist) {
+        return `./cache/${name}-${artist}.json`;
     }
-    cacheLyrics(name, artist, lyrics, appName) {
+    readCache(name, artist) {
+        try {
+            return JSON.parse((0, fs_1.readFileSync)(this.cachePath(name, artist), "utf-8"));
+        }
+        catch (_a) {
+            return null;
+        }
+    }
+    writeCache(name, artist, lyrics, appName) {
         if (!(0, fs_1.existsSync)("./cache"))
             (0, fs_1.mkdirSync)("./cache");
-        (0, fs_1.writeFileSync)(`./cache/${name}-${artist}.json`, JSON.stringify(Object.assign(Object.assign({}, lyrics), { appName })));
+        (0, fs_1.writeFileSync)(this.cachePath(name, artist), JSON.stringify(Object.assign(Object.assign({}, lyrics), { appName })));
     }
 }
 exports.LyricsFetcher = LyricsFetcher;

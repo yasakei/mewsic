@@ -1,7 +1,6 @@
 import { LyricsFetcher } from "./LyricsFetcher"
-import { SpotifySource} from "./Sources/SpotifySource"
-import { NetEaseMusicSource } from "./Sources/NetEaseMusicSource"
 import { LrcLibSource } from "./Sources/LrcLibSource"
+import { NetEaseMusicSource } from "./Sources/NetEaseMusicSource"
 import { QQMusicSource } from "./Sources/QQMusicSource"
 import { PlaybackStateUpdater } from "./PlaybackStateUpdater"
 import { PlaybackState } from "./PlaybackState"
@@ -10,81 +9,77 @@ import { Debug } from "./Debug"
 import { startServer } from "./Panel/Server"
 import { Settings } from "./Settings"
 import { Updater } from "./Updater"
-import { SpotifyService } from "./SpotifyService"
 import { v4 as uuidv4 } from "uuid"
-import { ExternalAuthServerAPI } from "./ExternalAuthServerAPI"
+
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 Settings.load()
 
 if (Settings.update.enableAutoupdate) {
     Updater.tryUpdate()
-        .then(() => {
-            init()
-        })
-        .catch((e) => {
-            Debug.write("LyricsStatus failed to update. Error: " + e.stack)
-
+        .then(init)
+        .catch((e: Error) => {
+            Debug.write(`Auto-update failed: ${e.stack}`)
             init()
         })
 } else {
     init()
 }
 
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
 function init(): void {
+    // Ensure a stable UUID exists for this installation
     if (!Settings.credentials.uuid) {
         Settings.credentials.uuid = uuidv4()
-
         Settings.save()
     }
-    ExternalAuthServerAPI.register()
 
-    SpotifyService.refresh()
-
+    // Lyrics sources — tried in order, first success wins
     const lyricsFetcher = new LyricsFetcher()
-    lyricsFetcher.addSource(new SpotifySource())
-    lyricsFetcher.addSource(new LrcLibSource())
-    lyricsFetcher.addSource(new NetEaseMusicSource())
-    lyricsFetcher.addSource(new QQMusicSource())
+    lyricsFetcher.addSource(new LrcLibSource())       // best synced-LRC coverage
+    lyricsFetcher.addSource(new NetEaseMusicSource()) // large Chinese + global catalogue
+    lyricsFetcher.addSource(new QQMusicSource())      // last resort
 
-    const playbackState = new PlaybackState()
+    const playbackState        = new PlaybackState()
     const playbackStateUpdater = new PlaybackStateUpdater(playbackState, lyricsFetcher)
+    const statusChanger        = new StatusChanger(playbackState)
 
-    const statusChanger = new StatusChanger(playbackState)
+    // Poll Spotify (via Discord token) every 2 s to detect song changes
+    setInterval(() => playbackStateUpdater.update(), 2000)
+
+    // 60 fps loop: advance local progress counter + fire status updates
+    let lastTick = Date.now()
 
     setInterval(() => {
-        playbackStateUpdater.update()
+        const now   = Date.now()
+        const delta = now - lastTick
+        lastTick    = now
 
-        //console.log(playbackState)
-        //console.log(statusChanger, playbackStateUpdater, SpotifyAccessToken)
-    }, 5000)
+        playbackState.songProgress += delta
 
-    let now = Date.now()
-    setInterval(() => {
         statusChanger.changeStatus()
-
-        playbackState.songProgress += Date.now() - now
 
         if (playbackState.ended) statusChanger.songChanged()
 
         console.clear()
-        console.log(`
-    Song: ${playbackState.songName || "Not listening"}
-    Author: ${playbackState.songAuthor || "Not listening"}
-    Song progress: ${statusChanger.formatSeconds(+(playbackState.songProgress / 1000).toFixed(0))}
-    Current lyrics: ${(playbackState.currentLine && playbackState.currentLine.text) || "Not available"}
-    Lyrics fetched from: ${lyricsFetcher.lastFetchedFrom}
-    `)
-
-        now = Date.now()
+        console.log(
+            `  Song:    ${playbackState.songName   || "—"}\n` +
+            `  Artist:  ${playbackState.songAuthor || "—"}\n` +
+            `  Time:    ${statusChanger.formatSeconds(Math.floor(playbackState.songProgress / 1000))}\n` +
+            `  Lyrics:  ${playbackState.currentLine?.text ?? "—"}\n` +
+            `  Source:  ${lyricsFetcher.lastFetchedFrom}`
+        )
     }, 1000 / 60)
 
     startServer()
 }
 
-process.on("uncaughtException", (e) => {
-    Debug.write(e.stack + "\n" + e.cause)
+// ─── Error handling ───────────────────────────────────────────────────────────
 
-    if (!e.message.includes("fetch failed")) {
-        process.exit(1)
-    }
+process.on("uncaughtException", (e: Error) => {
+    Debug.write(`${e.stack}\n${e.cause ?? ""}`)
+
+    // Network errors are transient — keep running
+    if (!e.message.includes("fetch failed")) process.exit(1)
 })

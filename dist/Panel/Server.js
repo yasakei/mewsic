@@ -9,7 +9,6 @@ const node_http_1 = require("node:http");
 const ws_1 = require("ws");
 const node_path_1 = require("node:path");
 const Settings_1 = require("../Settings");
-const SpotifyService_1 = require("../SpotifyService");
 function startServer() {
     const app = (0, express_1.default)();
     const httpServer = (0, node_http_1.createServer)(app);
@@ -21,63 +20,21 @@ function startServer() {
     app.get("/", (req, res) => {
         res.sendFile((0, node_path_1.join)(__dirname, "../../static/index.html"));
     });
-    app.get("/callback", (req, res) => {
-        if (Settings_1.Settings.credentials.useExternalAuthServer) {
-            if (!req.query.refresh_token)
-                return res.sendStatus(401);
-            const refreshToken = req.query.refresh_token;
-            console.log(refreshToken);
-            Settings_1.Settings.credentials.refreshToken = refreshToken;
-            Settings_1.Settings.save();
-        }
-                else {
-                        if (!req.query.code)
-                                return res.sendStatus(401);
-                        const code = req.query.code;
-                        Settings_1.Settings.credentials.code = code;
-                        SpotifyService_1.SpotifyService.exchange().then(() => Settings_1.Settings.save());
-                }
-                res.send(`<!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>Spotify authorization complete</title>
-        <script>
-            // Try to close the popup window once the callback has been received
-            (function () {
-                try {
-                    // If this window was opened by another page, attempt to close it
-                    if (window.opener && !window.opener.closed) {
-                        window.close();
-                    }
-                } catch (e) {
-                    // Ignore cross-origin or other errors
-                }
-            })();
-        </script>
-    </head>
-    <body>
-        <p>Authorization complete. This window should close automatically. If it doesn't, you can close it now.</p>
-    </body>
-    </html>`);
-    });
     wss.on("connection", (ws) => {
         ws.on("message", (data) => {
             const settings = JSON.parse(data.toString());
-            // Not typed but it's necessary
             Settings_1.Settings.credentials = settings.credentials;
             Settings_1.Settings.view = settings.view;
             Settings_1.Settings.timings = settings.timings;
             Settings_1.Settings.update = settings.update;
             Settings_1.Settings.save();
         });
-        const settings = JSON.stringify({
+        ws.send(JSON.stringify({
             credentials: Settings_1.Settings.credentials,
             view: Settings_1.Settings.view,
             timings: Settings_1.Settings.timings,
             update: Settings_1.Settings.update
-        });
-        ws.send(settings);
+        }));
     });
     httpServer.listen(8999);
 }
