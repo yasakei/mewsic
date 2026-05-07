@@ -4,7 +4,7 @@ $(`
         <header class="settings-header">
             <div class="settings-header-main">
                 <h1 class="settings-title">Lyrics Status Settings</h1>
-                <p class="settings-subtitle">Reads the currently playing song from your OS and shows synced lyrics in your Discord status.</p>
+                <p class="settings-subtitle">Reads the currently playing Spotify song from your connected Discord account and shows synced lyrics in your status.</p>
             </div>
             <div class="settings-header-meta">
                 <span id="version" class="settings-version">v4</span>
