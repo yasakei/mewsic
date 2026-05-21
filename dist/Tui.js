@@ -104,6 +104,19 @@ function promptLine(question_1) {
         }
     });
 }
+function promptOptionalLine(question_1) {
+    return __awaiter(this, arguments, void 0, function* (question, defaultValue = "") {
+        const rl = (0, promises_1.createInterface)({ input: node_process_1.stdin, output: node_process_1.stdout });
+        try {
+            const suffix = defaultValue ? ` ${dim(`[${defaultValue}]`)}` : "";
+            const answer = yield rl.question(`${question}${suffix} `);
+            return answer.trim();
+        }
+        finally {
+            rl.close();
+        }
+    });
+}
 function promptNumber(question, defaultValue, min, max) {
     return __awaiter(this, void 0, void 0, function* () {
         while (true) {
@@ -439,11 +452,11 @@ class Tui {
             Settings_1.Settings.view.timestamp = yield promptConfirm("Show playback timestamp?", Settings_1.Settings.view.timestamp);
             Settings_1.Settings.view.label = yield promptConfirm("Show the Song lyrics label?", Settings_1.Settings.view.label);
             // Optional emoji to show next to the song/status. Empty = none.
-            Settings_1.Settings.view.emoji = yield promptLine("Show an emoji?", Settings_1.Settings.view.emoji);
+            Settings_1.Settings.view.emoji = yield promptOptionalLine("Show an emoji?", Settings_1.Settings.view.emoji);
             const enableAdvanced = yield promptConfirm("Enable advanced custom status template?", Settings_1.Settings.view.advanced.enabled);
             Settings_1.Settings.view.advanced.enabled = enableAdvanced;
             if (enableAdvanced) {
-                Settings_1.Settings.view.advanced.customEmoji = yield promptLine("Custom emoji", Settings_1.Settings.view.advanced.customEmoji);
+                Settings_1.Settings.view.advanced.customEmoji = yield promptOptionalLine("Custom emoji", Settings_1.Settings.view.advanced.customEmoji);
                 Settings_1.Settings.view.advanced.customStatus = yield promptLine("Custom status template", Settings_1.Settings.view.advanced.customStatus);
             }
             console.log("");
@@ -540,11 +553,11 @@ class Tui {
                     ], "View", 76));
                     Settings_1.Settings.view.timestamp = yield promptConfirm("Show playback timestamp?", Settings_1.Settings.view.timestamp);
                     Settings_1.Settings.view.label = yield promptConfirm("Show the Song lyrics label?", Settings_1.Settings.view.label);
-                    Settings_1.Settings.view.emoji = yield promptLine("Show an emoji?", Settings_1.Settings.view.emoji);
+                    Settings_1.Settings.view.emoji = yield promptOptionalLine("Show an emoji?", Settings_1.Settings.view.emoji);
                     const enableAdvanced = yield promptConfirm("Enable advanced custom status template?", Settings_1.Settings.view.advanced.enabled);
                     Settings_1.Settings.view.advanced.enabled = enableAdvanced;
                     if (enableAdvanced) {
-                        Settings_1.Settings.view.advanced.customEmoji = yield promptLine("Custom emoji", Settings_1.Settings.view.advanced.customEmoji);
+                        Settings_1.Settings.view.advanced.customEmoji = yield promptOptionalLine("Custom emoji", Settings_1.Settings.view.advanced.customEmoji);
                         Settings_1.Settings.view.advanced.customStatus = yield promptLine("Custom status template", Settings_1.Settings.view.advanced.customStatus);
                     }
                     Settings_1.Settings.save();

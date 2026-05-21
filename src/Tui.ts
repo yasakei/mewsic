@@ -123,6 +123,18 @@ async function promptLine(question: string, defaultValue = ""): Promise<string> 
     }
 }
 
+async function promptOptionalLine(question: string, defaultValue = ""): Promise<string> {
+    const rl = createInterface({ input: stdin, output: stdout })
+
+    try {
+        const suffix = defaultValue ? ` ${dim(`[${defaultValue}]`)}` : ""
+        const answer = await rl.question(`${question}${suffix} `)
+        return answer.trim()
+    } finally {
+        rl.close()
+    }
+}
+
 async function promptNumber(question: string, defaultValue: number, min?: number, max?: number): Promise<number> {
     while (true) {
         const raw = await promptLine(question, String(defaultValue))
@@ -494,13 +506,13 @@ export class Tui {
         Settings.view.timestamp = await promptConfirm("Show playback timestamp?", Settings.view.timestamp)
         Settings.view.label = await promptConfirm("Show the Song lyrics label?", Settings.view.label)
         // Optional emoji to show next to the song/status. Empty = none.
-        Settings.view.emoji = await promptLine("Show an emoji?", Settings.view.emoji)
+        Settings.view.emoji = await promptOptionalLine("Show an emoji?", Settings.view.emoji)
 
         const enableAdvanced = await promptConfirm("Enable advanced custom status template?", Settings.view.advanced.enabled)
         Settings.view.advanced.enabled = enableAdvanced
 
         if (enableAdvanced) {
-            Settings.view.advanced.customEmoji = await promptLine("Custom emoji", Settings.view.advanced.customEmoji)
+            Settings.view.advanced.customEmoji = await promptOptionalLine("Custom emoji", Settings.view.advanced.customEmoji)
             Settings.view.advanced.customStatus = await promptLine(
                 "Custom status template",
                 Settings.view.advanced.customStatus
@@ -617,13 +629,13 @@ export class Tui {
 
                 Settings.view.timestamp = await promptConfirm("Show playback timestamp?", Settings.view.timestamp)
                 Settings.view.label = await promptConfirm("Show the Song lyrics label?", Settings.view.label)
-                Settings.view.emoji = await promptLine("Show an emoji?", Settings.view.emoji)
+                Settings.view.emoji = await promptOptionalLine("Show an emoji?", Settings.view.emoji)
 
                 const enableAdvanced = await promptConfirm("Enable advanced custom status template?", Settings.view.advanced.enabled)
                 Settings.view.advanced.enabled = enableAdvanced
 
                 if (enableAdvanced) {
-                    Settings.view.advanced.customEmoji = await promptLine("Custom emoji", Settings.view.advanced.customEmoji)
+                    Settings.view.advanced.customEmoji = await promptOptionalLine("Custom emoji", Settings.view.advanced.customEmoji)
                     Settings.view.advanced.customStatus = await promptLine("Custom status template", Settings.view.advanced.customStatus)
                 }
 

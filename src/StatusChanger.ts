@@ -151,9 +151,10 @@ export class StatusChanger {
                     Settings.view.advanced.customEmoji
                 )
             } else {
+                // In simple mode, use the top-level `view.emoji` (empty = no emoji).
                 this.sendStatusRequest(
                     this.buildSimpleStatus(line),
-                    Settings.view.advanced.customEmoji
+                    Settings.view.emoji
                 )
             }
 

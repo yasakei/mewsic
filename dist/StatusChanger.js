@@ -129,7 +129,8 @@ class StatusChanger {
                 this.sendStatusRequest(this.buildAdvancedStatus(Settings_1.Settings.view.advanced.customStatus), Settings_1.Settings.view.advanced.customEmoji);
             }
             else {
-                this.sendStatusRequest(this.buildSimpleStatus(line), Settings_1.Settings.view.advanced.customEmoji);
+                // In simple mode, use the top-level `view.emoji` (empty = no emoji).
+                this.sendStatusRequest(this.buildSimpleStatus(line), Settings_1.Settings.view.emoji);
             }
             break;
         }
