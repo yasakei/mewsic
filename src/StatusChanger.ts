@@ -19,6 +19,7 @@ const STATUS_TTL_MS      = 60_000
 export class StatusChanger {
     public readonly playbackState: PlaybackState
     public readonly autooffset: Autooffset
+    public static lastLatency = 0
 
     /** Lines already sent in the current song — prevents duplicate requests. */
     private sentLines: LyricsLine[] = []
@@ -48,7 +49,11 @@ export class StatusChanger {
                     expires_at: new Date(sentAt + STATUS_TTL_MS).toISOString(),
                 },
             }),
-        }).then(() => this.autooffset.addValue(Date.now() - sentAt))
+        }).then(() => {
+            const latency = Date.now() - sentAt
+            this.autooffset.addValue(latency)
+            StatusChanger.lastLatency = latency
+        })
     }
 
     /**

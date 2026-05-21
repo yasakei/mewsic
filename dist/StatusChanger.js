@@ -38,7 +38,11 @@ class StatusChanger {
                     expires_at: new Date(sentAt + STATUS_TTL_MS).toISOString(),
                 },
             }),
-        }).then(() => this.autooffset.addValue(Date.now() - sentAt));
+        }).then(() => {
+            const latency = Date.now() - sentAt;
+            this.autooffset.addValue(latency);
+            StatusChanger.lastLatency = latency;
+        });
     }
     /**
      * Builds the status text for a lyrics line using the simple format
@@ -142,3 +146,4 @@ class StatusChanger {
     }
 }
 exports.StatusChanger = StatusChanger;
+StatusChanger.lastLatency = 0;

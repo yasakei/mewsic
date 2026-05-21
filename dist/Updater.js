@@ -24,7 +24,7 @@ class Updater {
             if (yield Updater.checkUpdate()) {
                 console.log("Found an update. Starting download...");
                 yield Updater.forceUpdate();
-                console.log("LyricsStatus updated successfully! Please run \"npm install\" & restart to apply changes.");
+                console.log("LyricsStatus updated successfully! Please run \"npm install\" or \"pnpm install\" & restart to apply changes.");
                 process.exit(0);
             }
         });
@@ -39,7 +39,8 @@ class Updater {
                 "temp",
                 "log.txt",
                 "node_modules",
-                "package-lock.json"
+                "package-lock.json",
+                "pnpm-lock.yaml"
             ];
             if ((0, fs_1.existsSync)(downloadPath)) {
                 (0, fs_1.rmSync)(downloadPath, { recursive: true, force: true });

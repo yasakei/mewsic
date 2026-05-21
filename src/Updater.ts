@@ -12,7 +12,7 @@ export class Updater {
 
             await Updater.forceUpdate()
 
-            console.log("LyricsStatus updated successfully! Please run \"npm install\" & restart to apply changes.")
+            console.log("LyricsStatus updated successfully! Please run \"npm install\" or \"pnpm install\" & restart to apply changes.")
 
             process.exit(0)
         }
@@ -27,7 +27,8 @@ export class Updater {
             "temp",
             "log.txt",
             "node_modules",
-            "package-lock.json"
+            "package-lock.json",
+            "pnpm-lock.yaml"
         ]
 
         if (existsSync(downloadPath)) {

@@ -20,11 +20,13 @@ export class Settings {
         timestamp: true,
         /** Prepend `Song lyrics -` to the status text. */
         label: true,
+        /** Optional emoji shown next to the song in UI/status. Empty = none. */
+        emoji: "",
         advanced: {
             /** When true, `customStatus` is used instead of the simple format. */
             enabled: false,
             /** Emoji shown next to the status. Empty string = no emoji. */
-            customEmoji: "🎶",
+            customEmoji: "",
             customStatus: "[{timestamp}] [{lyrics}]",
         },
     }

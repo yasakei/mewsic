@@ -36,8 +36,16 @@ git clone https://github.com/OvalQuilter/lyrics-status
 
 ### 2. Install dependencies
 
+You can use either npm or pnpm. pnpm is recommended if you want stricter dependency isolation.
+
 ```
 npm install
+```
+
+or
+
+```
+pnpm install
 ```
 
 ### 3. Build
@@ -46,17 +54,57 @@ npm install
 npm run build
 ```
 
+or
+
+```
+pnpm run build
+```
+
 ### 4. Run
 
 ```
 npm start
 ```
 
+or
+
+```
+pnpm start
+```
+
+If this is your first launch, `pnpm start` will ask whether you want the web panel or the terminal setup.
+The terminal path also includes a dedicated update-settings screen.
+
+While the live terminal dashboard is running you can use two handy shortcuts:
+
+ - Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to open the terminal settings editor (edit Discord token, view, timings, update options, etc.). Changes are saved to `settings.json` and are applied immediately to the running process.
+ - Press <kbd>Ctrl</kbd>+<kbd>B</kbd> to start the web panel (same as `pnpm run web`).
+
+There is also a direct script to open the terminal settings editor without starting the dashboard:
+
+```
+pnpm run settings
+```
+
 ### 5. Configure
 
-Open `http://localhost:8999` in your browser. You'll see the settings panel.
+The terminal setup flow covers the full configuration flow, including update settings.
 
-**Discord token** — the only credential you need. Here's [a video](https://www.youtube.com/watch?v=LnBnm_tZlyU) showing how to get it. Paste it into the Discord token field and click Check to verify it works.
+If you still want the legacy panel, start it explicitly with:
+
+```
+pnpm run web
+```
+
+Then open `http://localhost:8999` in your browser.
+
+**Discord token** — the only credential you need. Here's [a video](https://www.youtube.com/watch?v=LnBnm_tZlyU) showing how to get it. In the terminal wizard, paste it when prompted and it will be verified automatically.
+
+If you want to rerun setup later, use:
+
+```
+pnpm run setup
+```
 
 That's it. Play a song on Spotify and your Discord status will start updating with synced lyrics within a few seconds.
 
@@ -94,9 +142,11 @@ Fetched lyrics are cached locally in `./cache/` to avoid redundant requests.
 
 **Status not updating** — make sure Spotify is connected to your Discord account under Settings → Connections, and that you have a song actively playing (not paused).
 
-**Token invalid** — use the Check button in the settings panel to verify your Discord token is correct.
+**Token invalid** — re-run `pnpm run setup` and verify the Discord token when prompted.
 
 **No lyrics found** — the song may not be in any of the lyrics databases, or only has unsynced lyrics. LyricsStatus requires time-synced lyrics to work.
+
+**Want the old panel back** — run `pnpm run web`.
 
 **Windows** — try running the command prompt with administrator privileges or temporarily disabling your firewall.
 
