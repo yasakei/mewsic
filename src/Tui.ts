@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline/promises"
 import { stdin, stdout } from "node:process"
 import { Settings } from "./Settings"
+import AutoStart from "./AutoStart"
 
 interface RuntimeSnapshot {
     songName: string | undefined
@@ -536,8 +537,11 @@ export class Tui {
         ], "Maintenance", 76))
 
         Settings.update.enableAutoupdate = await promptConfirm("Enable automatic update checks?", Settings.update.enableAutoupdate)
+        Settings.update.autoStart = await promptConfirm("Enable auto-start on login?", Settings.update.autoStart)
 
         Settings.save()
+        // apply autostart immediately
+        try { AutoStart.enable(Settings.update.autoStart) } catch {}
 
         console.log("")
         console.log(summary())
@@ -678,7 +682,9 @@ export class Tui {
                 ], "Updates", 76))
 
                 Settings.update.enableAutoupdate = await promptConfirm("Enable automatic update checks?", Settings.update.enableAutoupdate)
+                Settings.update.autoStart = await promptConfirm("Enable auto-start on login?", Settings.update.autoStart)
                 Settings.save()
+                try { AutoStart.enable(Settings.update.autoStart) } catch {}
 
                 console.log("")
                 console.log(frame([`${cyan("Update settings saved.")}`], `${bold("Saved")}`, 76))

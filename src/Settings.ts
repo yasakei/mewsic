@@ -42,6 +42,8 @@ export class Settings {
 
     public static update = {
         enableAutoupdate: true,
+        /** Start the app automatically on user login. */
+        autoStart: false,
     }
 
     // ── Persistence ───────────────────────────────────────────────────────────

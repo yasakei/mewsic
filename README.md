@@ -151,3 +151,21 @@ Fetched lyrics are cached locally in `./cache/` to avoid redundant requests.
 **Windows** — try running the command prompt with administrator privileges or temporarily disabling your firewall.
 
 **Linux** — try running the terminal as root if you hit permission issues.
+
+## Start, Stop and Autostart
+
+The repository includes helper scripts and an autostart option to make running the app easier.
+
+- **Start:** Run `pnpm start` to launch the background process. The start script writes a PID file at `~/.config/lyrics-status/lyrics-status.pid` and will refuse to spawn a duplicate if it detects a live instance.
+- **Stop:** Run `pnpm stop` to stop the running instance. The stop script reads the PID file, sends `SIGTERM` to the process, and removes the PID file.
+- **Autostart on login:** There's an `Auto-start on login` toggle in the terminal settings editor (also available in the web panel). When enabled the app will attempt to install a platform-specific autostart entry:
+	- Linux: a `.desktop` entry in your user autostart directory.
+	- macOS: a LaunchAgent plist in `~/Library/LaunchAgents`.
+	- Windows: a `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry.
+	Changes take effect immediately; disabling the toggle will attempt to remove the installed autostart entry.
+
+Notes:
+- `pnpm start` does not attach an interactive TTY to an already-running background process; it only avoids spawning duplicates.
+- PID file location: `~/.config/lyrics-status/lyrics-status.pid`.
+- Open the web panel manually with `pnpm run web`.
+- Open the terminal settings editor directly with `pnpm run settings`.

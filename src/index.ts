@@ -11,6 +11,9 @@ import { startServer } from "./Panel/Server"
 import { Settings } from "./Settings"
 import { Updater } from "./Updater"
 import { v4 as uuidv4 } from "uuid"
+import { writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs"
+import { homedir } from "node:os"
+import path from "node:path"
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -107,6 +110,18 @@ bootstrap().catch((e: Error) => {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 function init(enableWebPanel: boolean): void {
+    // Write PID file so external scripts can detect a running instance.
+    try {
+        const cfg = path.join(homedir(), ".config", "lyrics-status")
+        if (!existsSync(cfg)) mkdirSync(cfg, { recursive: true })
+        const pidFile = path.join(cfg, "lyrics-status.pid")
+        writeFileSync(pidFile, String(process.pid), { encoding: "utf8" })
+        process.on("exit", () => { try { unlinkSync(pidFile) } catch {} })
+        process.on("SIGINT", () => process.exit(0))
+        process.on("SIGTERM", () => process.exit(0))
+    } catch {
+        // best-effort
+    }
     if (!Settings.credentials.uuid) {
         Settings.credentials.uuid = uuidv4()
         Settings.save()

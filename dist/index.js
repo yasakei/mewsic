@@ -8,6 +8,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const LyricsFetcher_1 = require("./LyricsFetcher");
 const LrcLibSource_1 = require("./Sources/LrcLibSource");
@@ -22,6 +25,9 @@ const Server_1 = require("./Panel/Server");
 const Settings_1 = require("./Settings");
 const Updater_1 = require("./Updater");
 const uuid_1 = require("uuid");
+const node_fs_1 = require("node:fs");
+const node_os_1 = require("node:os");
+const node_path_1 = __importDefault(require("node:path"));
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 const args = new Set(process.argv.slice(2));
 const forceSetup = args.has("--setup");
@@ -103,6 +109,23 @@ bootstrap().catch((e) => {
 });
 // ─── Init ─────────────────────────────────────────────────────────────────────
 function init(enableWebPanel) {
+    // Write PID file so external scripts can detect a running instance.
+    try {
+        const cfg = node_path_1.default.join((0, node_os_1.homedir)(), ".config", "lyrics-status");
+        if (!(0, node_fs_1.existsSync)(cfg))
+            (0, node_fs_1.mkdirSync)(cfg, { recursive: true });
+        const pidFile = node_path_1.default.join(cfg, "lyrics-status.pid");
+        (0, node_fs_1.writeFileSync)(pidFile, String(process.pid), { encoding: "utf8" });
+        process.on("exit", () => { try {
+            (0, node_fs_1.unlinkSync)(pidFile);
+        }
+        catch (_a) { } });
+        process.on("SIGINT", () => process.exit(0));
+        process.on("SIGTERM", () => process.exit(0));
+    }
+    catch (_a) {
+        // best-effort
+    }
     if (!Settings_1.Settings.credentials.uuid) {
         Settings_1.Settings.credentials.uuid = (0, uuid_1.v4)();
         Settings_1.Settings.save();

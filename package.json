@@ -16,7 +16,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index",
+    "start": "node scripts/start.js",
+    "stop": "node scripts/stop.js",
     "setup": "node dist/index --setup",
     "settings": "node dist/index --settings",
     "web": "node dist/index --web",

@@ -75,4 +75,6 @@ Settings.timings = {
 };
 Settings.update = {
     enableAutoupdate: true,
+    /** Start the app automatically on user login. */
+    autoStart: false,
 };

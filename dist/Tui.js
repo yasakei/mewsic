@@ -8,11 +8,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Tui = void 0;
 const promises_1 = require("node:readline/promises");
 const node_process_1 = require("node:process");
 const Settings_1 = require("./Settings");
+const AutoStart_1 = __importDefault(require("./AutoStart"));
 const supportsAnsi = node_process_1.stdout.isTTY && !process.env.NO_COLOR;
 function color(code, text) {
     if (!supportsAnsi)
@@ -473,7 +477,13 @@ class Tui {
                 "Optional update checks keep the beta build aligned with the latest fixes.",
             ], "Maintenance", 76));
             Settings_1.Settings.update.enableAutoupdate = yield promptConfirm("Enable automatic update checks?", Settings_1.Settings.update.enableAutoupdate);
+            Settings_1.Settings.update.autoStart = yield promptConfirm("Enable auto-start on login?", Settings_1.Settings.update.autoStart);
             Settings_1.Settings.save();
+            // apply autostart immediately
+            try {
+                AutoStart_1.default.enable(Settings_1.Settings.update.autoStart);
+            }
+            catch (_a) { }
             console.log("");
             console.log(summary());
             console.log("");
@@ -594,7 +604,12 @@ class Tui {
                         "Automatic update checks and maintenance options.",
                     ], "Updates", 76));
                     Settings_1.Settings.update.enableAutoupdate = yield promptConfirm("Enable automatic update checks?", Settings_1.Settings.update.enableAutoupdate);
+                    Settings_1.Settings.update.autoStart = yield promptConfirm("Enable auto-start on login?", Settings_1.Settings.update.autoStart);
                     Settings_1.Settings.save();
+                    try {
+                        AutoStart_1.default.enable(Settings_1.Settings.update.autoStart);
+                    }
+                    catch (_a) { }
                     console.log("");
                     console.log(frame([`${cyan("Update settings saved.")}`], `${bold("Saved")}`, 76));
                     console.log("");
