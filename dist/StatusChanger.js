@@ -17,6 +17,8 @@ class StatusChanger {
     constructor(playbackState) {
         /** Lines already sent in the current song — prevents duplicate requests. */
         this.sentLines = [];
+        /** Song ID at the time of the last status send — used to detect song changes. */
+        this.lastSeenSongId = "";
         this.playbackState = playbackState;
         this.autooffset = new Autooffset_1.Autooffset();
     }
@@ -42,6 +44,24 @@ class StatusChanger {
             const latency = Date.now() - sentAt;
             this.autooffset.addValue(latency);
             StatusChanger.lastLatency = latency;
+        });
+    }
+    /** Sends an empty status to clear the Discord custom status. */
+    clearStatus() {
+        fetch(DISCORD_STATUS_API, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: Settings_1.Settings.credentials.token,
+            },
+            body: JSON.stringify({
+                custom_status: {
+                    text: "",
+                    emoji_id: null,
+                    emoji_name: null,
+                    expires_at: null,
+                },
+            }),
         });
     }
     /**
@@ -99,7 +119,17 @@ class StatusChanger {
     changeStatus() {
         this.autooffset.setLimit(Settings_1.Settings.timings.autooffset);
         const { playbackState } = this;
-        if (!playbackState.isPlaying || !playbackState.hasLyrics || playbackState.ended)
+        // Autoclear: detect song change and send an empty status
+        if (Settings_1.Settings.view.autoClear &&
+            playbackState.songId &&
+            playbackState.songId !== this.lastSeenSongId) {
+            this.lastSeenSongId = playbackState.songId;
+            this.sentLines = [];
+            this.clearStatus();
+        }
+        if (!playbackState.isPlaying ||
+            !playbackState.hasLyrics ||
+            playbackState.ended)
             return;
         const lyrics = playbackState.lyrics;
         if (!lyrics)

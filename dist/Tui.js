@@ -457,6 +457,7 @@ class Tui {
             Settings_1.Settings.view.label = yield promptConfirm("Show the Song lyrics label?", Settings_1.Settings.view.label);
             // Optional emoji to show next to the song/status. Empty = none.
             Settings_1.Settings.view.emoji = yield promptOptionalLine("Show an emoji?", Settings_1.Settings.view.emoji);
+            Settings_1.Settings.view.autoClear = yield promptConfirm("Clear status on song switch?", Settings_1.Settings.view.autoClear);
             const enableAdvanced = yield promptConfirm("Enable advanced custom status template?", Settings_1.Settings.view.advanced.enabled);
             Settings_1.Settings.view.advanced.enabled = enableAdvanced;
             if (enableAdvanced) {
@@ -564,6 +565,7 @@ class Tui {
                     Settings_1.Settings.view.timestamp = yield promptConfirm("Show playback timestamp?", Settings_1.Settings.view.timestamp);
                     Settings_1.Settings.view.label = yield promptConfirm("Show the Song lyrics label?", Settings_1.Settings.view.label);
                     Settings_1.Settings.view.emoji = yield promptOptionalLine("Show an emoji?", Settings_1.Settings.view.emoji);
+                    Settings_1.Settings.view.autoClear = yield promptConfirm("Clear status on song switch?", Settings_1.Settings.view.autoClear);
                     const enableAdvanced = yield promptConfirm("Enable advanced custom status template?", Settings_1.Settings.view.advanced.enabled);
                     Settings_1.Settings.view.advanced.enabled = enableAdvanced;
                     if (enableAdvanced) {

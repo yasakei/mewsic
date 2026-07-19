@@ -1,10 +1,10 @@
 $(`
-<div id="menu-UI" class="act-anim">
+<div id="menu-UI">
     <div class="settings-page">
         <header class="settings-header">
             <div class="settings-header-main">
-                <h1 class="settings-title">Lyrics Status Settings</h1>
-                <p class="settings-subtitle">Reads the currently playing Spotify song from your connected Discord account and shows synced lyrics in your status.</p>
+                <h1 class="settings-title">Lyrics Status</h1>
+                <p class="settings-subtitle">Shows synced lyrics from Spotify in your Discord status.</p>
             </div>
             <div class="settings-header-meta">
                 <span id="version" class="settings-version">v4</span>
@@ -14,77 +14,66 @@ $(`
         <main id="menu-contents" class="settings-content">
             <section class="settings-section">
                 <h2 class="settings-name">Discord</h2>
-                <p class="settings-description">Your Discord user token is stored locally and only used to update your custom status.</p>
-
                 <div class="option form-row">
-                    <label class="form-label" for="user-token">Discord token</label>
+                    <label class="form-label" for="user-token">Token</label>
                     <div class="form-field">
                         <div class="form-field-inline">
-                            <input type="text" id="user-token" class="text-input1 full-width-input" placeholder="Paste your Discord user token">
-                            <button id="check-token" class="button1"><span class="label">Check</span></button>
+                            <input type="text" id="user-token" class="text-input full-width-input" placeholder="Paste your Discord user token">
+                            <button id="check-token" class="button"><span class="label">Check</span></button>
                         </div>
                     </div>
                 </div>
             </section>
 
             <section class="settings-section">
-                <h2 class="settings-name">Status preview</h2>
-                <p class="settings-description">Choose what appears in your Discord custom status while music is playing.</p>
-
+                <h2 class="settings-name">Status</h2>
                 <div class="option form-row">
                     <label class="checkbox-row" for="enable-timestamp">
                         <input type="checkbox" id="enable-timestamp" checked>
                         <span>Show playback timestamp</span>
                     </label>
                 </div>
-
                 <div class="option form-row">
                     <label class="checkbox-row" for="enable-label">
                         <input type="checkbox" id="enable-label" checked>
-                        <span>Show label before lyrics ("Song lyrics -")</span>
+                        <span>Show label before lyrics</span>
                     </label>
                 </div>
-
                 <div class="option form-row">
                     <label class="checkbox-row" for="enable-autoclear">
                         <input type="checkbox" id="enable-autoclear" checked>
                         <span>Clear status on song switch</span>
                     </label>
                 </div>
-
                 <div class="option form-row">
-                    <div class="form-label">Live preview</div>
+                    <label class="form-label">Preview</label>
                     <div class="form-field">
-                        <div id="status-preview" class="b-area">[2:17] Song lyrics - La-la-la</div>
+                        <div id="status-preview" class="preview-bar">[2:17] Song lyrics - La-la-la</div>
                     </div>
                 </div>
-
                 <div class="divider"></div>
-
                 <div class="option form-row">
                     <label class="checkbox-row" for="enable-advanced-swt">
                         <input type="checkbox" id="enable-advanced-swt">
-                        <span>Enable advanced custom status template</span>
+                        <span>Advanced template</span>
                     </label>
                 </div>
-
                 <div id="advanced-swt" class="sub-settings hid">
                     <div class="option form-row">
                         <label class="form-label" for="custom-emoji">
-                            Custom emoji
-                            <img id="custom-emoji-help" class="clickable question-mark1" src="https://www.pngall.com/wp-content/uploads/5/Help-Question-Mark-PNG-Free-Download.png" height="15" alt="Help">
+                            Emoji
+                            <span id="custom-emoji-help" class="help-btn">?</span>
                         </label>
-                        <input style="width: 60px;" maxlength="4" id="custom-emoji" class="text-input1" placeholder="🎶">
+                        <input style="width: 60px;" maxlength="4" id="custom-emoji" class="text-input" placeholder="...">
                     </div>
-
                     <div class="option form-row">
                         <label class="form-label" for="custom-status">
-                            Custom status template
-                            <img id="custom-status-help" class="clickable question-mark1" src="https://www.pngall.com/wp-content/uploads/5/Help-Question-Mark-PNG-Free-Download.png" height="15" alt="Help">
+                            Template
+                            <span id="custom-status-help" class="help-btn">?</span>
                         </label>
                         <div class="form-field">
-                            <textarea rows="3" cols="40" id="custom-status" class="text-input2" placeholder="[{timestamp}] Song lyrics - {lyrics}"></textarea>
-                            <small class="field-help">Placeholders: {lyrics}, {song_name}, {song_author}, {timestamp}. Status is cropped to 128 characters.</small>
+                            <textarea rows="3" cols="40" id="custom-status" class="text-input textarea-input" placeholder="[{timestamp}] Song lyrics - {lyrics}"></textarea>
+                            <small class="field-help">Placeholders: {lyrics}, {song_name}, {song_author}, {timestamp}</small>
                         </div>
                     </div>
                 </div>
@@ -92,152 +81,265 @@ $(`
 
             <section class="settings-section">
                 <h2 class="settings-name">Timing</h2>
-                <p class="settings-description">Fine-tune how early or late your status changes compared to the actual lyrics.</p>
-
                 <div class="option form-row">
-                    <label class="form-label" for="send-time-offset">Send time offset (ms)</label>
+                    <label class="form-label" for="send-time-offset">Offset</label>
                     <div class="form-field-inline">
-                        <input type="text" id="send-time-offset" class="text-input1" maxlength="4" value="500">
-                        <img id="send-time-offset-help" class="clickable question-mark1" src="https://www.pngall.com/wp-content/uploads/5/Help-Question-Mark-PNG-Free-Download.png" height="15" alt="Help">
+                        <input type="text" id="send-time-offset" class="text-input" maxlength="4" value="500">
+                        <span class="inline-text">ms</span>
+                        <span id="send-time-offset-help" class="help-btn">?</span>
                     </div>
                 </div>
-
                 <div class="option form-row">
                     <label class="checkbox-row" for="enable-autooffset">
                         <input type="checkbox" id="enable-autooffset">
-                        <span>Enable Autooffset (auto-calculated delay)</span>
+                        <span>Autooffset</span>
                     </label>
                 </div>
-
                 <div class="option form-row">
-                    <label class="form-label" for="autooffset">Autooffset samples</label>
+                    <label class="form-label" for="autooffset">Samples</label>
                     <div class="form-field-inline">
-                        <input style="width: 60px;" id="autooffset" class="text-input1" type="text" maxlength="2">
+                        <input style="width: 60px;" id="autooffset" class="text-input" type="text" maxlength="2">
                         <span class="inline-text">requests</span>
-                        <img id="autooffset-help" class="clickable question-mark1" src="https://www.pngall.com/wp-content/uploads/5/Help-Question-Mark-PNG-Free-Download.png" height="15" style="left: 1px;" alt="Help">
+                        <span id="autooffset-help" class="help-btn">?</span>
                     </div>
                 </div>
             </section>
 
             <section class="settings-section">
-                <h2 class="settings-name">Updates</h2>
-                <p class="settings-description">Keep Lyrics Status up to date with the latest fixes and features.</p>
-
+                <h2 class="settings-name">Update</h2>
                 <div class="option form-row">
                     <label class="checkbox-row" for="enable-autoupdate">
                         <input type="checkbox" id="enable-autoupdate">
-                        <span>Enable automatic update checks</span>
+                        <span>Automatic update checks</span>
                     </label>
                 </div>
             </section>
         </main>
     </div>
 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+    <!-- Dark mode toggle -->
+    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+    </button>
 
-        :root { --alpha: .9; }
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Light theme (default) ──────────────────────── */
+        :root {
+            --bg:          #f5f3ef;
+            --bg-surface:  #fff;
+            --bg-inset:    #fff;
+            --fg:          #2a2a2a;
+            --fg-muted:    #666;
+            --fg-dim:      #999;
+            --border:      #2a2a2a;
+            --border-soft: #ccc;
+            --border-faint:#ddd;
+            --accent:      #2a2a2a;
+            --error:       #b44;
+            --scrollbar:   #ccc;
+            --scrolltrack: #f5f3ef;
+        }
+
+        /* ── Dark theme ─────────────────────────────────── */
+        [data-theme="dark"] {
+            --bg:          #1a1a1a;
+            --bg-surface:  #242424;
+            --bg-inset:    #161616;
+            --fg:          #e0e0e0;
+            --fg-muted:    #aaa;
+            --fg-dim:      #555;
+            --border:      #e0e0e0;
+            --border-soft: #444;
+            --border-faint:#333;
+            --accent:      #e0e0e0;
+            --error:       #e66;
+            --scrollbar:   #444;
+            --scrolltrack: #1a1a1a;
+        }
 
         #menu-UI {
             position: fixed; inset: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at top left, rgba(60,63,68,var(--alpha)), rgba(24,26,27,var(--alpha)));
+            background: var(--bg);
             z-index: 999; overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
         }
-        #menu-UI * { color: rgba(230,230,230,var(--alpha)); font-family: Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
 
-        .settings-page { max-width: 900px; margin: 32px auto 40px; padding: 8px 24px 32px; }
+        #menu-UI * {
+            color: var(--fg);
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+        }
 
-        .settings-header { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 24px; align-items: flex-end; }
-        .settings-title  { margin: 0 0 4px; font-size: 26px; font-weight: 600; }
-        .settings-subtitle { margin: 0; font-size: 14px; color: rgba(200,200,200,var(--alpha)); }
-        .settings-version { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(75,85,99,.8); text-transform: uppercase; letter-spacing: .08em; }
+        .settings-page {
+            max-width: 720px; margin: 0 auto; padding: 40px 24px 60px;
+        }
 
-        .settings-section { padding: 16px 0 12px; border-bottom: 1px solid rgba(50,52,55,var(--alpha)); }
+        /* ── Header ─────────────────────────────────────── */
+        .settings-header {
+            display: flex; justify-content: space-between; align-items: flex-end;
+            border-bottom: 3px solid var(--border); padding-bottom: 16px; margin-bottom: 0;
+        }
+        .settings-title {
+            margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;
+        }
+        .settings-subtitle {
+            margin: 6px 0 0; font-size: 12px; color: var(--fg-muted); line-height: 1.5;
+        }
+        .settings-version {
+            font-size: 11px; font-weight: 600; padding: 4px 10px;
+            border: 2px solid var(--border); letter-spacing: 1px;
+        }
+
+        /* ── Sections ───────────────────────────────────── */
+        .settings-section {
+            padding: 20px 0; border-bottom: 1px solid var(--border-faint);
+        }
         .settings-section:last-of-type { border-bottom: none; }
-        .settings-name { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
-        .settings-description { margin: 0 0 12px; font-size: 13px; color: rgba(195,195,195,var(--alpha)); }
+
+        .settings-name {
+            font-size: 14px; font-weight: 700; margin: 0 0 14px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
 
         .option { margin-top: 10px; }
         .form-row { display: flex; align-items: flex-start; gap: 12px; }
-        .form-label { width: 160px; font-size: 13px; font-weight: 500; padding-top: 4px; }
+        .form-label {
+            width: 120px; font-size: 12px; font-weight: 600; padding-top: 8px;
+            color: var(--fg-muted);
+        }
         .form-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
         .form-field-inline { display: inline-flex; align-items: center; gap: 8px; }
         .full-width-input { width: 100%; max-width: 100%; }
-        .field-help { font-size: 11px; color: rgba(180,180,180,var(--alpha)); }
-        .inline-text { font-size: 12px; color: rgba(210,210,210,var(--alpha)); }
-        .checkbox-row { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+        .field-help { font-size: 11px; color: var(--fg-dim); }
+        .inline-text { font-size: 11px; color: var(--fg-dim); }
 
-        .text-input1, .text-input2 {
-            border: 1px solid rgba(75,75,75,var(--alpha)); border-radius: 4px;
-            background: rgba(35,37,40,var(--alpha)); color: rgba(235,235,235,var(--alpha));
-            padding: 6px 10px; font-size: 13px; outline: none;
-            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+        .checkbox-row {
+            display: inline-flex; align-items: center; gap: 10px;
+            font-size: 12px; font-weight: 500; cursor: pointer;
         }
-        .text-input1:focus, .text-input2:focus {
-            border-color: rgba(88,166,255,.9); box-shadow: 0 0 0 1px rgba(88,166,255,.4);
-            background: rgba(26,28,32,var(--alpha));
+        .checkbox-row input[type="checkbox"] {
+            appearance: none; -webkit-appearance: none;
+            width: 18px; height: 18px; border: 2px solid var(--border-soft);
+            background: var(--bg-surface); cursor: pointer;
+            position: relative; flex-shrink: 0;
         }
-        .text-input2 { resize: vertical; min-height: 70px; line-height: 1.4; }
-
-        .button1 {
-            min-width: 90px; height: 32px; padding: 0 12px; font-size: 13px;
-            border: none; border-radius: 4px; background: rgba(75,85,99,.9);
-            color: white; cursor: pointer;
-            transition: background 1s ease, transform 1s ease, box-shadow 1s ease;
+        .checkbox-row input[type="checkbox"]:checked {
+            border-color: var(--accent); background: var(--accent);
         }
-        .button1:hover  { background: rgba(107,114,128,.95); }
-        .button1:active { transform: translateY(1px); box-shadow: none; }
-        .button1.success { background: rgba(34,197,94,.95); box-shadow: 0 4px 12px rgba(34,197,94,.35); }
-        .button1.error   { background: rgba(239,68,68,.95);  box-shadow: 0 4px 12px rgba(239,68,68,.35); }
-        .button1 .label  { display: inline-block; transition: opacity .2s ease; }
-
-        .b-area {
-            border: 1px solid rgba(75,85,99,var(--alpha)); border-radius: 999px;
-            padding: 6px 16px; background: rgba(24,26,27,var(--alpha));
-            font-family: "SF Mono",Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-            font-size: 12px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+        .checkbox-row input[type="checkbox"]:checked::after {
+            content: ''; position: absolute; top: 3px; left: 6px;
+            width: 4px; height: 8px; border: solid var(--bg); border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
         }
 
-        .divider { height: 1px; background: rgba(50,52,55,var(--alpha)); margin: 12px 0; }
+        /* ── Inputs ─────────────────────────────────────── */
+        .text-input, .textarea-input {
+            border: 2px solid var(--border-soft); border-radius: 0;
+            background: var(--bg-surface); color: var(--fg);
+            padding: 8px 12px; font-size: 12px; outline: none;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+        }
+        .text-input:focus, .textarea-input:focus {
+            border-color: var(--accent);
+        }
+        .textarea-input { resize: vertical; min-height: 70px; line-height: 1.5; }
 
+        /* ── Buttons ────────────────────────────────────── */
+        .button {
+            min-width: 90px; height: 34px; padding: 0 16px;
+            font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+            border: 2px solid var(--border-soft); border-radius: 0;
+            background: var(--bg-surface); color: var(--fg-muted);
+            cursor: pointer; font-family: 'JetBrains Mono', 'Courier New', monospace;
+            transition: all 0.15s;
+        }
+        .button:hover { border-color: var(--accent); color: var(--fg); }
+        .button:active { transform: translate(1px, 1px); }
+        .button.success { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+        .button.error { border-color: var(--error); color: var(--error); }
+        .button .label { display: inline-block; transition: opacity 0.15s; }
+
+        /* ── Preview ────────────────────────────────────── */
+        .preview-bar {
+            border: 2px solid var(--border-soft); border-radius: 0;
+            padding: 8px 16px; background: var(--bg-surface);
+            font-size: 12px; white-space: nowrap; display: inline-flex;
+            align-items: center; color: var(--fg-muted);
+        }
+
+        /* ── Divider ────────────────────────────────────── */
+        .divider { height: 1px; background: var(--border-faint); margin: 14px 0; }
+
+        /* ── Sub-settings ───────────────────────────────── */
         .sub-settings {
-            margin-top: 6px; padding: 10px 12px 12px;
-            border-radius: 6px; background: rgba(17,19,21,var(--alpha));
-            border: 1px dashed rgba(75,85,99,var(--alpha));
+            margin-top: 8px; padding: 14px 16px;
+            border: 2px dashed var(--border-soft); background: var(--bg-inset);
         }
 
-        .clickable { cursor: pointer; }
-        .question-mark1 {
-            bottom: 0; right: 0; margin-right: 0; position: relative;
-            filter: invert(70%) sepia(4%) saturate(459%) hue-rotate(173deg) brightness(90%) contrast(86%);
+        /* ── Help button ────────────────────────────────── */
+        .help-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 18px; height: 18px; border: 1px solid var(--border-soft);
+            font-size: 10px; font-weight: 700; color: var(--fg-dim);
+            cursor: pointer; position: relative; top: 0; margin-left: 4px;
         }
+        .help-btn:hover { border-color: var(--accent); color: var(--fg); }
 
-        .act { display: block; }
-        .hid { display: none; }
-
+        /* ── Modal ──────────────────────────────────────── */
         .modal {
-            min-width: 300px; max-width: 700px; width: fit-content; height: fit-content;
-            background: rgba(32,34,36,var(--alpha)); top: 50%; left: 50%;
-            transform: translate(-50%,-50%); border-radius: 8px;
-            box-shadow: 0 18px 45px rgba(0,0,0,.65); font-size: 14px; z-index: 9999; position: absolute;
+            min-width: 300px; max-width: 600px; width: fit-content; height: fit-content;
+            background: var(--bg-surface); top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            border: 3px solid var(--border); font-size: 13px;
+            z-index: 9999; position: absolute;
         }
         .modal * { user-select: none; }
         .modal > .top {
-            width: 100%; height: 32px; background: rgba(17,24,39,var(--alpha));
-            border-top-left-radius: 8px; border-top-right-radius: 8px;
-            box-shadow: 0 1px 0 rgba(15,23,42,.9);
-            display: flex; align-items: center; justify-content: space-between; padding: 0 8px;
+            width: 100%; height: 36px; background: var(--accent);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px;
         }
-        .modal > .top > .title { font-size: 13px; font-weight: 500; }
+        .modal > .top > .title {
+            font-size: 12px; font-weight: 600; letter-spacing: 1px;
+            text-transform: uppercase; color: var(--bg);
+        }
         .modal > .top > .close {
-            width: 22px; height: 22px; background: rgba(239,68,68,var(--alpha));
-            border-radius: 999px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+            width: 22px; height: 22px; border: 2px solid var(--bg);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 12px; font-weight: 700; color: var(--bg);
         }
-        .modal > .description { padding: 10px 12px 12px; text-align: left; }
+        .modal > .top > .close:hover { background: var(--bg); color: var(--accent); }
+        .modal > .description {
+            padding: 14px 16px; text-align: left; line-height: 1.6;
+            font-size: 12px; color: var(--fg-muted);
+        }
+        .modal > .description strong { color: var(--fg); }
 
-        #menu-UI::-webkit-scrollbar { width: 10px; }
-        #menu-UI::-webkit-scrollbar-thumb { border-radius: 5px; background: rgba(65,65,65,var(--alpha)); }
-        #menu-UI::-webkit-scrollbar-thumb:hover { background: rgba(75,75,75,var(--alpha)); }
+        /* ── Theme toggle button ────────────────────────── */
+        .theme-toggle {
+            position: fixed; bottom: 24px; right: 24px; z-index: 10000;
+            width: 44px; height: 44px;
+            border: 2px solid var(--border); border-radius: 0;
+            background: var(--bg-surface); color: var(--fg);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            padding: 0;
+        }
+        .theme-toggle svg { width: 20px; height: 20px; }
+        .theme-toggle .icon-sun { display: none; }
+        [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+        [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+        .theme-toggle:hover { border-color: var(--accent); }
+
+        .act { display: block; }
+        .hid { display: none; }
     </style>
 </div>
 `).appendTo(document.body);
@@ -259,7 +361,7 @@ let userTokenInput        = $("#user-token"),
     enableAutooffset      = $("#enable-autooffset"),
     autooffset            = $("#autooffset"),
     autooffsetHelp        = $("#autooffset-help"),
-    enableAutoupdate      = $("#enable-autoupdate")
+    enableAutoupdate      = $("#enable-autoupdate"),
     enableAutoclear       = $("#enable-autoclear");
 
 // ── Settings model ────────────────────────────────────────────────────────────
@@ -269,13 +371,30 @@ let settings = {
         timestamp: true,
         label: true,
         autoClear: true,
-        advanced: { enabled: false, customEmoji: "🎶", customStatus: "[{timestamp}] Song lyrics - {lyrics}" }
+        advanced: { enabled: false, customEmoji: "", customStatus: "[{timestamp}] [{lyrics}]" }
     },
     timings:  { sendTimeOffset: 500, enableAutooffset: true, autooffset: 3 },
     update:   { enableAutoupdate: true }
 };
 
 let settingsLoaded = false;
+
+// ── Dark mode toggle ──────────────────────────────────────────────────────────
+(function initTheme() {
+    const saved = localStorage.getItem("ls-theme");
+    if (saved === "dark") document.documentElement.setAttribute("data-theme", "dark");
+})();
+
+$("#theme-toggle").on("click", function () {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    if (isDark) {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.setItem("ls-theme", "light");
+    } else {
+        document.documentElement.setAttribute("data-theme", "dark");
+        localStorage.setItem("ls-theme", "dark");
+    }
+});
 
 // ── Event handlers ────────────────────────────────────────────────────────────
 userTokenInput.change(() => {
@@ -293,7 +412,7 @@ checkTokenButton.click(() => {
 
     setTimeout(() => {
         checkTokenButton.addClass(valid ? "success" : "error");
-        label.text(valid ? "✔" : "✖").css("opacity", 1);
+        label.text(valid ? "OK" : "ERR").css("opacity", 1);
 
         setTimeout(() => {
             label.css("opacity", 0);
@@ -317,11 +436,11 @@ enableLabelCheckbox.click(() => {
     statusPreview.text(getStatusString("La-la-la", 137000));
 });
 
-
 enableAutoclear.click(() => {
     settings.view.autoClear = enableAutoclear.prop("checked");
     saveSettings();
 });
+
 enableAdvancedSWT.click(() => {
     const state = enableAdvancedSWT.prop("checked");
     settings.view.advanced.enabled = state;
@@ -332,8 +451,7 @@ enableAdvancedSWT.click(() => {
 });
 
 customEmojiHelp.click(() => modal("Help",
-    "<strong>Custom emoji</strong> lets you add a unicode emoji before your status. " +
-    "Get one <a style='color:rgba(154,154,154,var(--alpha))' href='https://www.piliapp.com/emoji/list/'>here</a>."
+    "Add a unicode emoji before your status."
 ));
 
 customEmoji.on("input", (e) => {
@@ -343,8 +461,7 @@ customEmoji.on("input", (e) => {
 });
 
 customStatusHelp.click(() => modal("Help",
-    "<strong>Custom status template</strong> — use {lyrics}, {song_name}, {song_author}, {timestamp} as placeholders.<br>" +
-    "Status is automatically cropped to 128 characters."
+    "Template placeholders: {lyrics}, {song_name}, {song_author}, {timestamp}.<br>Status is cropped to 128 characters."
 ));
 
 customStatus.on("input", (e) => {
@@ -357,7 +474,7 @@ sendTimeOffset.on("input", (e) => {
     e.preventDefault();
     const value = +sendTimeOffset.val();
     if (isNaN(value)) {
-        sendTimeOffset.css("color", "rgba(200,0,0,var(--alpha))");
+        sendTimeOffset.css("color", "var(--error)");
         return;
     }
     sendTimeOffset.css("color", "inherit");
@@ -366,8 +483,7 @@ sendTimeOffset.on("input", (e) => {
 });
 
 sendTimeOffsetHelp.click(() => modal("Help",
-    "Offset makes status changes appear slightly before the lyrics line to feel more in sync.<br>" +
-    "Defined in milliseconds. Default is 500."
+    "Makes the status change slightly before the lyric line so it feels in sync.<br>Defined in milliseconds. Default is 500."
 ));
 
 enableAutooffset.click(() => {
@@ -378,14 +494,14 @@ enableAutooffset.click(() => {
 autooffset.on("input", (e) => {
     e.preventDefault();
     const value = +autooffset.val();
-    if (isNaN(value)) { autooffset.css("color", "rgba(200,0,0,var(--alpha))"); return; }
+    if (isNaN(value)) { autooffset.css("color", "var(--error)"); return; }
     autooffset.css("color", "inherit");
     settings.timings.autooffset = value;
     saveSettings();
 });
 
 autooffsetHelp.click(() => modal("Help",
-    "Autooffset calculates the average Discord API response time and adjusts the offset automatically."
+    "Measures Discord API response times and adjusts the offset for you automatically."
 ));
 
 enableAutoupdate.click(() => {
@@ -399,7 +515,7 @@ function formatSeconds(s) {
 }
 
 function getStatusString(lyrics, time) {
-    return `${settings.view.timestamp ? `[${formatSeconds((time / 1000).toFixed(0))}] ` : ""}${settings.view.label ? "Song lyrics - " : ""}${lyrics.replace("♪", "🎶")}`;
+    return `${settings.view.timestamp ? "[" + formatSeconds((time / 1000).toFixed(0)) + "] " : ""}${settings.view.label ? "Song lyrics - " : ""}${lyrics}`;
 }
 
 function checkToken(token) {
@@ -441,14 +557,14 @@ function loadSettings(raw) {
     }
 }
 
-function modal(title, description, styles = {}) {
+function modal(title, description) {
     const w = $(`
     <div class="modal">
         <div class="top">
-            <span class="title" style="color:${styles.titleTextColor || "white"}">${title}</span>
-            <div class="close"><img class="closeMark" src="https://www.nicepng.com/png/full/61-612286_clip-art-check-mark-close-x-icon-png.png" height="14"></div>
+            <span class="title">${title}</span>
+            <div class="close">X</div>
         </div>
-        <div class="description" style="color:${styles.descriptionTextColor || "white"}">${description}</div>
+        <div class="description">${description}</div>
     </div>`).appendTo(document.body);
 
     w.find(".close").click(() => w.remove());

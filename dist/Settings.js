@@ -57,6 +57,8 @@ Settings.view = {
     label: true,
     /** Optional emoji shown next to the song in UI/status. Empty = none. */
     emoji: "",
+    /** Clear the Discord status immediately when the song switches. */
+    autoClear: true,
     advanced: {
         /** When true, `customStatus` is used instead of the simple format. */
         enabled: false,
