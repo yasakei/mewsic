@@ -508,6 +508,7 @@ export class Tui {
         Settings.view.label = await promptConfirm("Show the Song lyrics label?", Settings.view.label)
         // Optional emoji to show next to the song/status. Empty = none.
         Settings.view.emoji = await promptOptionalLine("Show an emoji?", Settings.view.emoji)
+        Settings.view.autoClear = await promptConfirm("Clear status on song switch?", Settings.view.autoClear)
 
         const enableAdvanced = await promptConfirm("Enable advanced custom status template?", Settings.view.advanced.enabled)
         Settings.view.advanced.enabled = enableAdvanced
@@ -634,6 +635,7 @@ export class Tui {
                 Settings.view.timestamp = await promptConfirm("Show playback timestamp?", Settings.view.timestamp)
                 Settings.view.label = await promptConfirm("Show the Song lyrics label?", Settings.view.label)
                 Settings.view.emoji = await promptOptionalLine("Show an emoji?", Settings.view.emoji)
+                Settings.view.autoClear = await promptConfirm("Clear status on song switch?", Settings.view.autoClear)
 
                 const enableAdvanced = await promptConfirm("Enable advanced custom status template?", Settings.view.advanced.enabled)
                 Settings.view.advanced.enabled = enableAdvanced

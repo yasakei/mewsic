@@ -46,6 +46,13 @@ $(`
                 </div>
 
                 <div class="option form-row">
+                    <label class="checkbox-row" for="enable-autoclear">
+                        <input type="checkbox" id="enable-autoclear" checked>
+                        <span>Clear status on song switch</span>
+                    </label>
+                </div>
+
+                <div class="option form-row">
                     <div class="form-label">Live preview</div>
                     <div class="form-field">
                         <div id="status-preview" class="b-area">[2:17] Song lyrics - La-la-la</div>
@@ -252,7 +259,8 @@ let userTokenInput        = $("#user-token"),
     enableAutooffset      = $("#enable-autooffset"),
     autooffset            = $("#autooffset"),
     autooffsetHelp        = $("#autooffset-help"),
-    enableAutoupdate      = $("#enable-autoupdate");
+    enableAutoupdate      = $("#enable-autoupdate")
+    enableAutoclear       = $("#enable-autoclear");
 
 // ── Settings model ────────────────────────────────────────────────────────────
 let settings = {
@@ -260,6 +268,7 @@ let settings = {
     view: {
         timestamp: true,
         label: true,
+        autoClear: true,
         advanced: { enabled: false, customEmoji: "🎶", customStatus: "[{timestamp}] Song lyrics - {lyrics}" }
     },
     timings:  { sendTimeOffset: 500, enableAutooffset: true, autooffset: 3 },
@@ -308,6 +317,11 @@ enableLabelCheckbox.click(() => {
     statusPreview.text(getStatusString("La-la-la", 137000));
 });
 
+
+enableAutoclear.click(() => {
+    settings.view.autoClear = enableAutoclear.prop("checked");
+    saveSettings();
+});
 enableAdvancedSWT.click(() => {
     const state = enableAdvancedSWT.prop("checked");
     settings.view.advanced.enabled = state;
@@ -412,6 +426,7 @@ function loadSettings(raw) {
         userTokenInput.val(settings.credentials.token);
         enableTimestampCheckbox.prop("checked", settings.view.timestamp);
         enableLabelCheckbox.prop("checked", settings.view.label);
+        enableAutoclear.prop("checked", settings.view.autoClear !== false);
         if (settings.view.advanced.enabled) enableAdvancedSWT.click();
         customEmoji.val(settings.view.advanced.customEmoji);
         customStatus.html(settings.view.advanced.customStatus);
