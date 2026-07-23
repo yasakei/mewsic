@@ -1,4 +1,4 @@
-# LyricsStatus V3
+# LyricsStatus V4 (Fork)
 
 ## What is it?
 
