@@ -24,3 +24,16 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+maintainer = "Yasakei <yasakei@users.noreply.github.com>"
+copyright = "2026 Yasakei"
+description = "Mewsic — mirror the song you're playing into your Discord status, line by line."
+section = "utils"
+priority = "optional"
+
+[package.metadata.generate-rpm]
+description = "Mewsic — mirror the song you're playing into your Discord status, line by line."
+summary = "Mirror the song you're playing into your Discord status"
+license = "MIT"
+vendor = "Yasakei"

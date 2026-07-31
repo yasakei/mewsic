@@ -1,0 +1,163 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: mewsic
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            bin: mewsic
+          - os: macos-13
+            target: x86_64-apple-darwin
+            bin: mewsic
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin: mewsic
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: mewsic.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install aarch64 Linux cross-linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build release binary
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package raw binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          exe=""
+          if [ "$RUNNER_OS" = "Windows" ]; then exe=".exe"; fi
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/mewsic-${{ matrix.target }}$exe"
+
+      - name: Build Linux .deb and .rpm (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          cargo install cargo-deb --locked
+          cargo install cargo-generate-rpm --locked
+          cargo deb --target x86_64-unknown-linux-gnu
+          cargo generate-rpm --target x86_64-unknown-linux-gnu
+          cp target/x86_64-unknown-linux-gnu/debian/*.deb dist/
+          cp target/generate-rpm/*.rpm dist/
+
+      - name: Build Windows installer (NSIS)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install nsis -y --no-progress
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "installer/mewsic.exe"
+          "/c/Program Files (x86)/NSIS/makensis.exe" installer/mewsic.nsi
+          cp installer/mewsic-setup.exe dist/
+
+      - name: Build macOS installer (DMG)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dmg/Mewsic
+          cp "target/${{ matrix.target }}/release/mewsic" dmg/Mewsic/mewsic
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Mewsic" -srcfolder dmg -ov -format UDZO "dist/mewsic-${{ matrix.target }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mewsic-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  arch:
+    name: arch package
+    runs-on: ubuntu-latest
+    needs: build
+    container:
+      image: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewsic-x86_64-unknown-linux-gnu
+          path: dist
+
+      - name: Create non-root builder and build package
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          VERSION="$(grep '^version' Cargo.toml | head -1 | sed -E 's/.*\"([^\"]+)\".*/\1/')"
+          mkdir -p pkg
+          cp dist/mewsic-x86_64-unknown-linux-gnu pkg/mewsic
+          cat > pkg/PKGBUILD <<EOF
+          pkgname=mewsic
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Mewsic — mirror the song you're playing into your Discord status, line by line."
+          arch=('x86_64')
+          url="https://github.com/${{ github.repository }}"
+          license=('MIT')
+          source=("mewsic")
+          md5sums=('SKIP')
+          package() {
+            install -Dm755 "mewsic" "\${pkgdir}/usr/bin/mewsic"
+          }
+          EOF
+          su builder -c "cd '$GITHUB_WORKSPACE/pkg' && makepkg -f --noconfirm"
+          mkdir -p pkgout
+          cp pkg/*.pkg.tar.zst pkgout/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mewsic-arch
+          path: pkgout/*.pkg.tar.zst
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release and upload binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ( cd artifacts && find . -type f | sort | xargs sha256sum | sed 's#  .\/#  #' > checksums.txt )
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            || true
+          gh release upload "${GITHUB_REF_NAME}" artifacts/*/* artifacts/checksums.txt --clobber
