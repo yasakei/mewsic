@@ -101,8 +101,8 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
-      - name: Install Node.js (required by Actions inside container)
-        run: pacman -Syu --noconfirm nodejs
+      - name: Install Node.js and git (required by Actions inside container)
+        run: pacman -Syu --noconfirm nodejs git
 
       - uses: actions/checkout@v4
         with:
@@ -135,6 +135,7 @@ jobs:
             install -Dm755 "mewsic" "\${pkgdir}/usr/bin/mewsic"
           }
           EOF
+          chown -R builder:builder pkg
           su builder -c "cd '$GITHUB_WORKSPACE/pkg' && makepkg -f --noconfirm"
           mkdir -p pkgout
           cp pkg/*.pkg.tar.zst pkgout/
