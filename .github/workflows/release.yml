@@ -101,6 +101,9 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
+      - name: Install Node.js (required by Actions inside container)
+        run: pacman -Syu --noconfirm nodejs
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -109,6 +112,7 @@ jobs:
         with:
           name: mewsic-x86_64-unknown-linux-gnu
           path: dist
+          merge-multiple: true
 
       - name: Create non-root builder and build package
         run: |
