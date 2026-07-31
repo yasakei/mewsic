@@ -66,8 +66,9 @@ jobs:
           cargo install cargo-deb --locked
           cargo install cargo-generate-rpm --locked
           cargo deb --target x86_64-unknown-linux-gnu
-          cargo generate-rpm --target x86_64-unknown-linux-gnu
-          cp target/x86_64-unknown-linux-gnu/debian/*.deb dist/
+          cargo build --release
+          cargo generate-rpm
+          cp target/debian/*.deb dist/ 2>/dev/null || cp target/x86_64-unknown-linux-gnu/debian/*.deb dist/
           cp target/generate-rpm/*.rpm dist/
 
       - name: Build Windows installer (NSIS)

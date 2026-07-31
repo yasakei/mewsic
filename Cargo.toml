@@ -36,3 +36,6 @@ description = "Mewsic — mirror the song you're playing into your Discord statu
 summary = "Mirror the song you're playing into your Discord status"
 license = "MIT"
 vendor = "Yasakei"
+assets = [
+    { source = "target/release/mewsic", dest = "/usr/bin/mewsic", mode = "755" },
+]
