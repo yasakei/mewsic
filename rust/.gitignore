@@ -1,0 +1,5 @@
+/target
+settings.json
+*.pid
+log.txt
+cache/

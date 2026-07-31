@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mewsic · control panel</title>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: {} }
+  };
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Apply the system color scheme before first paint.
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.classList.add('dark');
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    document.documentElement.classList.toggle('dark', e.matches);
+  });
+</script>
+<style>
+  :root {
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { font-family: var(--sans); }
+
+  /* Live status dot — class toggled by JS (dot / dot on / dot off). */
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #a1a1aa; display: inline-block;
+  }
+  .dot.on {
+    background: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, .7);
+    animation: pulse 1.6s infinite;
+  }
+  .dot.off { background: #ef4444; }
+  @keyframes pulse { 50% { opacity: .4; } }
+
+  /* Saved toast — class toggled by JS (saved-flag / show). */
+  .saved-flag {
+    position: fixed; bottom: 22px; right: 22px;
+    background: #10b981; color: #04140c;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    padding: 10px 16px; border-radius: 999px;
+    opacity: 0; transform: translateY(8px); transition: all .3s;
+    pointer-events: none; box-shadow: 0 6px 20px rgba(16, 185, 129, .35);
+    z-index: 50;
+  }
+  .saved-flag.show { opacity: 1; transform: translateY(0); }
+
+  /* Token check button — className replaced wholesale by JS ("" / ok / err),
+     so base styling hangs off the id and variants off compound selectors. */
+  #checkToken {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 36px; padding: 0 14px; border-radius: 8px;
+    border: 1px solid #d4d4d8; background: #fff; color: #18181b;
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
+  }
+  #checkToken:hover { border-color: #8b5cf6; color: #8b5cf6; background: #fafafa; }
+  #checkToken:disabled { opacity: .6; cursor: default; }
+  #checkToken.ok { border-color: #10b981; color: #10b981; }
+  #checkToken.err { border-color: #ef4444; color: #ef4444; }
+  html.dark #checkToken {
+    border-color: #3f3f46; background: #18181b; color: #e4e4e7;
+  }
+  html.dark #checkToken:hover { border-color: #a78bfa; color: #a78bfa; background: #1f1f23; }
+  html.dark #checkToken.ok { border-color: #34d399; color: #34d399; }
+  html.dark #checkToken.err { border-color: #f87171; color: #f87171; }
+</style>
+</head>
+<body class="min-h-screen bg-zinc-50 text-zinc-900 antialiased transition-colors dark:bg-zinc-950 dark:text-zinc-100">
+<div class="mx-auto max-w-2xl px-5 py-10 sm:px-6">
+  <header class="mb-8 flex items-center gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+    <div class="flex h-10 shrink-0 items-center rounded-xl bg-violet-600 px-3 font-mono text-sm font-bold text-white shadow-sm">(=^･ω･^=)</div>
+    <div class="min-w-0">
+      <h1 class="text-lg font-semibold tracking-tight">mewsic</h1>
+      <p class="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">keep your Discord status in sync with the song you're playing</p>
+    </div>
+    <div class="flex-1"></div>
+    <span id="live" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-zinc-200 px-3 py-1 font-mono text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <span id="dot" class="dot"></span><span id="liveText">connecting…</span>
+    </span>
+  </header>
+
+  <!-- Now playing -->
+  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <h2 class="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">now playing</h2>
+    <div class="text-base font-semibold" id="npTitle">—</div>
+    <div class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400" id="npArtist">—</div>
+    <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+      <i id="npBar" class="block h-full w-0 rounded-full bg-violet-600 transition-[width] duration-300 ease-out"></i>
+    </div>
+    <div class="mt-1.5 font-mono text-[11px] text-zinc-400 dark:text-zinc-500" id="npTime">0:00 / 0:00</div>
+    <div class="mt-4 min-h-11 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3.5 py-3 font-mono text-[13px] dark:border-zinc-700 dark:bg-zinc-950/60" id="npLine">waiting…</div>
+    <div class="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
+      <span>source <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npSource">—</b></span>
+      <span>ping <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npPing">—</b></span>
+      <span>autooffset <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npAuto">—</b></span>
+    </div>
+  </section>
+
+  <!-- Account -->
+  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <h2 class="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">account</h2>
+    <div class="flex flex-wrap items-center gap-3">
+      <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="token">Discord token</label>
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <input type="text" id="token" autocomplete="off" placeholder="paste your Discord user token"
+               class="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+        <button id="checkToken">check</button>
+      </div>
+    </div>
+    <p class="mt-2 text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Stored locally in settings.toml. Used to read Spotify and update your status.</p>
+  </section>
+
+  <!-- Status -->
+  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">status</h2>
+    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="timestamp">Playback timestamp</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="timestamp" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="label">Show "Song lyrics -" label</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="label" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoClear">Clear on song switch</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="autoClear" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="emoji">Emoji</label>
+        <div class="flex min-w-0 flex-1 items-center justify-end">
+          <input type="text" id="emoji" placeholder="optional, empty = none"
+                 class="h-9 w-full max-w-[220px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="advanced">Advanced template</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="advanced" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5" id="advRow" style="display:none">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="advEmoji">Template emoji</label>
+        <div class="flex min-w-0 flex-1 items-center justify-end">
+          <input type="text" id="advEmoji" placeholder="optional"
+                 class="h-9 w-full max-w-[220px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5" id="advTemplateRow" style="display:none">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="advTemplate">Template</label>
+        <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+          <textarea id="advTemplate" rows="3" class="w-full resize-y rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500"></textarea>
+          <small class="text-[11px] text-zinc-400 dark:text-zinc-500">{lyrics} {song_name} {song_author} {timestamp} + _upper/_lower/_cropped/_letters_only variants · cropped to 128 chars</small>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <span class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300">Preview</span>
+        <div class="min-w-0 flex-1">
+          <div id="preview" class="whitespace-pre-wrap break-words rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3.5 py-3 font-mono text-[13px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-400"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Timing -->
+  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">timing</h2>
+    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="offset">Send offset (ms)</label>
+        <div class="flex flex-1 items-center justify-end gap-2">
+          <input type="number" id="offset" min="0" max="10000" class="h-9 w-24 rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60">
+        </div>
+        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">How early the status changes relative to each lyric line.</small>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoOffset">Autooffset</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="autoOffset" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Measure Discord API latency and adjust automatically (+100ms).</small>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="samples">Autooffset samples</label>
+        <div class="flex flex-1 items-center justify-end">
+          <input type="number" id="samples" min="1" max="20" class="h-9 w-24 rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- System -->
+  <section class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">system</h2>
+    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoStart">Auto-start on login</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="autoStart" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Installs a platform autostart entry (Linux/macOS/Windows).</small>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="saved-flag" id="savedFlag">saved ✓</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let settings = null;
+let saveTimer = null;
+
+function flashSaved() {
+  const f = $("savedFlag");
+  f.classList.add("show");
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(() => f.classList.remove("show"), 1400);
+}
+
+function setCheck(id, value) { $(id).checked = !!value; }
+function setVal(id, value) { $(id).value = value ?? ""; }
+
+function bindSettings() {
+  setCheck("timestamp", settings.view.timestamp);
+  setCheck("label", settings.view.label);
+  setCheck("autoClear", settings.view.auto_clear);
+  setVal("emoji", settings.view.emoji);
+  setCheck("advanced", settings.view.advanced.enabled);
+  setVal("advEmoji", settings.view.advanced.emoji);
+  setVal("advTemplate", settings.view.advanced.template);
+  setVal("offset", settings.timing.send_time_offset);
+  setCheck("autoOffset", settings.timing.enable_autooffset);
+  setVal("samples", settings.timing.autooffset);
+  setCheck("autoStart", settings.update.auto_start);
+  setVal("token", settings.token);
+  updateAdvancedVisibility();
+  renderPreview();
+}
+
+function collectSettings() {
+  return {
+    token: $("token").value.replace(/"/g, ""),
+    view: {
+      timestamp: $("timestamp").checked,
+      label: $("label").checked,
+      emoji: $("emoji").value,
+      auto_clear: $("autoClear").checked,
+      advanced: {
+        enabled: $("advanced").checked,
+        emoji: $("advEmoji").value,
+        template: $("advTemplate").value
+      }
+    },
+    timing: {
+      send_time_offset: +$("offset").value || 500,
+      enable_autooffset: $("autoOffset").checked,
+      autooffset: Math.max(1, +$("samples").value || 3)
+    },
+    update: { auto_start: $("autoStart").checked }
+  };
+}
+
+function updateAdvancedVisibility() {
+  const on = $("advanced").checked;
+  $("advRow").style.display = on ? "flex" : "none";
+  $("advTemplateRow").style.display = on ? "flex" : "none";
+}
+
+function fmtSeconds(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m + ":" + String(sec).padStart(2, "0");
+}
+
+function renderPreview() {
+  const v = collectSettings();
+  let parts = [];
+  if (v.view.timestamp) parts.push("[2:17]");
+  if (v.view.label) parts.push("Song lyrics -");
+  parts.push("La-la-la");
+  let text = parts.join(" ");
+  if (v.view.advanced.enabled) {
+    text = v.view.advanced.template
+      .replace(/\{lyrics\}/g, "La-la-la")
+      .replace(/\{song_name\}/g, "Example Song")
+      .replace(/\{song_author\}/g, "Example Artist")
+      .replace(/\{timestamp\}/g, "2:17")
+      .replace(/♪/g, "🎶");
+  }
+  const emoji = v.view.advanced.enabled ? v.view.advanced.emoji : v.view.emoji;
+  $("preview").textContent = (emoji ? emoji + " " : "") + text.slice(0, 128);
+}
+
+function queueSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 400);
+}
+
+async function saveNow() {
+  const body = collectSettings();
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (res.ok) { settings = body; flashSaved(); }
+}
+
+async function loadSettings() {
+  const res = await fetch("/api/settings");
+  settings = await res.json();
+  bindSettings();
+}
+
+async function pollState() {
+  try {
+    const res = await fetch("/api/state");
+    const s = await res.json();
+    $("npTitle").textContent = s.song || "—";
+    $("npArtist").textContent = s.artist || "—";
+    const dur = s.duration || 0;
+    const prog = s.progress || 0;
+    const pct = dur ? Math.min(100, Math.round(prog / dur * 100)) : 0;
+    $("npBar").style.width = pct + "%";
+    $("npTime").textContent = fmtSeconds(Math.floor(prog / 1000)) + " / " + fmtSeconds(Math.floor(dur / 1000));
+    $("npLine").textContent = s.line || (s.hasLyrics ? "waiting for the next line…" : "no synced lyrics");
+    $("npSource").textContent = s.source || "—";
+    $("npPing").textContent = s.latency != null ? s.latency + " ms" : "—";
+    $("npAuto").textContent = s.autooffset != null ? s.autooffset + " ms" : "—";
+    $("dot").className = "dot " + (s.playing ? "on" : (s.song ? "off" : ""));
+    $("liveText").textContent = s.playing ? "playing" : (s.song ? "paused" : "idle");
+  } catch (e) {
+    $("dot").className = "dot off";
+    $("liveText").textContent = "offline";
+  }
+}
+
+async function checkToken() {
+  const btn = $("checkToken");
+  const token = $("token").value.trim();
+  if (!token) return;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const res = await fetch("/api/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token })
+    });
+    const data = await res.json();
+    btn.className = data.ok ? "ok" : "err";
+    btn.textContent = data.ok ? "valid ✓" : "invalid ✗";
+    setTimeout(() => { btn.className = ""; btn.textContent = "check"; btn.disabled = false; }, 2200);
+  } catch (e) {
+    btn.className = "err"; btn.textContent = "error";
+    setTimeout(() => { btn.className = ""; btn.textContent = "check"; btn.disabled = false; }, 2200);
+  }
+}
+
+["timestamp","label","autoClear","advanced","autoOffset","autoStart"].forEach(id =>
+  $(id).addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); }));
+["emoji","advEmoji","offset","samples","token"].forEach(id =>
+  $(id).addEventListener("input", () => { queueSave(); renderPreview(); }));
+$("advTemplate").addEventListener("input", () => { queueSave(); renderPreview(); });
+$("checkToken").addEventListener("click", checkToken);
+
+loadSettings();
+pollState();
+setInterval(pollState, 1000);
+</script>
+</body>
+</html>

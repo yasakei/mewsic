@@ -1,0 +1,26 @@
+[package]
+name = "mewsic"
+version = "4.0.0"
+edition = "2021"
+description = "Mewsic — mirror the song you're playing into your Discord status, line by line."
+authors = ["Yasakei"]
+license = "MIT"
+
+[[bin]]
+name = "mewsic"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+ureq = { version = "2", features = ["json"] }
+crossterm = "0.28"
+ratatui = "0.29"
+base64 = "0.22"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
