@@ -28,7 +28,6 @@ strip = true
 [package.metadata.deb]
 maintainer = "Yasakei <yasakei@users.noreply.github.com>"
 copyright = "2026 Yasakei"
-description = "Mewsic — mirror the song you're playing into your Discord status, line by line."
 section = "utils"
 priority = "optional"
 

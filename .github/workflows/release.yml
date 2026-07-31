@@ -23,7 +23,7 @@ jobs:
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             bin: mewsic
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             bin: mewsic
           - os: macos-latest
@@ -34,7 +34,7 @@ jobs:
             bin: mewsic.exe
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -104,7 +104,7 @@ jobs:
       - name: Install Node.js and git (required by Actions inside container)
         run: pacman -Syu --noconfirm nodejs git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 

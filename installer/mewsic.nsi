@@ -11,8 +11,6 @@ InstallDir "$PROGRAMFILES\Mewsic"
 RequestExecutionLevel admin
 
 !define MUI_ABORTWARNING
-!define HWND_BROADCAST 0xFFFF
-!define WM_WININICHANGE 0x001A
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
