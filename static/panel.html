@@ -115,7 +115,33 @@
         <button id="checkToken">check</button>
       </div>
     </div>
-    <p class="mt-2 text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Stored locally in settings.toml. Used to read Spotify and update your status.</p>
+    <div class="flex flex-wrap items-center gap-3 pt-3.5">
+      <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="source">Music source</label>
+      <div class="flex min-w-0 flex-1 items-center gap-2">
+        <select id="source"
+                class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-2 font-mono text-[13px] outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-100">
+          <option value="spotify">Spotify via Discord</option>
+          <option value="lastfm">Last.fm / YouTube Music</option>
+        </select>
+      </div>
+    </div>
+    <div id="lastfmRow" class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+      <div class="flex flex-wrap items-center gap-3 pt-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="lastfmKey">Last.fm API key</label>
+        <div class="flex min-w-0 flex-1 items-center justify-end">
+          <input type="text" id="lastfmKey" placeholder="free key at last.fm/api/account/create"
+                 class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 pt-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="lastfmUser">Last.fm username</label>
+        <div class="flex min-w-0 flex-1 items-center justify-end">
+          <input type="text" id="lastfmUser" placeholder="your last.fm username"
+                 class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+        </div>
+      </div>
+    </div>
+    <p class="mt-2 text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Stored locally in settings.toml. Discord token is used to update your status. Last.fm covers YouTube Music and any player that scrobbles (WebScrobbler, YT Music desktop).</p>
   </section>
 
   <!-- Status -->
@@ -266,6 +292,10 @@ function bindSettings() {
   setVal("samples", settings.timing.autooffset);
   setCheck("autoStart", settings.update.auto_start);
   setVal("token", settings.token);
+  $("source").value = settings.source || "spotify";
+  setVal("lastfmKey", settings.lastfm ? settings.lastfm.api_key : "");
+  setVal("lastfmUser", settings.lastfm ? settings.lastfm.username : "");
+  updateSourceVisibility();
   updateAdvancedVisibility();
   renderPreview();
 }
@@ -273,6 +303,11 @@ function bindSettings() {
 function collectSettings() {
   return {
     token: $("token").value.replace(/"/g, ""),
+    source: $("source").value,
+    lastfm: {
+      api_key: $("lastfmKey").value.trim(),
+      username: $("lastfmUser").value.trim()
+    },
     view: {
       timestamp: $("timestamp").checked,
       label: $("label").checked,
@@ -291,6 +326,10 @@ function collectSettings() {
     },
     update: { auto_start: $("autoStart").checked }
   };
+}
+
+function updateSourceVisibility() {
+  $("lastfmRow").style.display = $("source").value === "lastfm" ? "" : "none";
 }
 
 function updateAdvancedVisibility() {
@@ -392,8 +431,9 @@ async function checkToken() {
 
 ["timestamp","label","autoClear","advanced","autoOffset","autoStart"].forEach(id =>
   $(id).addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); }));
-["emoji","advEmoji","offset","samples","token"].forEach(id =>
+["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser"].forEach(id =>
   $(id).addEventListener("input", () => { queueSave(); renderPreview(); }));
+$("source").addEventListener("change", () => { updateSourceVisibility(); queueSave(); });
 $("advTemplate").addEventListener("input", () => { queueSave(); renderPreview(); });
 $("checkToken").addEventListener("click", checkToken);
 

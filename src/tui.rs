@@ -293,6 +293,61 @@ fn prompt_confirm(screen: &Screen, question: &str, default: bool) -> Option<bool
     }
 }
 
+/// Pick one of several choices by index number or name. The caller renders the
+/// option list itself; `keys` are the match strings. Enter picks `default`.
+fn prompt_choice<'a>(
+    screen: &Screen,
+    question: &str,
+    keys: &[&'a str],
+    default: Option<&'a str>,
+) -> Option<&'a str> {
+    loop {
+        let default_hint = default.map(|d| format!(" · Enter = {d}")).unwrap_or_default();
+        let p = Prompt {
+            question,
+            input: "",
+            masked: false,
+            hint: format!(
+                "Enter 1-{} or name{default_hint} · Esc = cancel",
+                keys.len()
+            ),
+        };
+        draw_screen(screen, Some(&p), "");
+        let input = match read_key_blocking() {
+            Some(k) if is_ctrl_c(&k) || k.code == KeyCode::Esc => return None,
+            Some(k) if k.code == KeyCode::Enter => {
+                if let Some(d) = default {
+                    return Some(d);
+                }
+                continue;
+            }
+            Some(k) => match k.code {
+                KeyCode::Char(c) if !c.is_control() => c.to_string(),
+                _ => continue,
+            },
+            None => continue,
+        };
+        let input = input.trim().to_ascii_lowercase();
+        if let Ok(idx) = input.parse::<usize>() {
+            if (1..=keys.len()).contains(&idx) {
+                return Some(keys[idx - 1]);
+            }
+            continue;
+        }
+        for &key in keys {
+            if key.eq_ignore_ascii_case(&input) {
+                return Some(key);
+            }
+        }
+        let mut prefixes = keys.iter().filter(|k| k.starts_with(&input));
+        if let Some(&key) = prefixes.next() {
+            if prefixes.next().is_none() {
+                return Some(key);
+            }
+        }
+    }
+}
+
 fn prompt_number(screen: &Screen, question: &str, default: u64, min: u64, max: u64) -> Option<u64> {
     let mut buf = String::new();
     loop {
@@ -409,16 +464,53 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     welcome.blank();
     welcome.push(Line::from(vec![
         Span::styled("●", Style::default().fg(Color::Green)),
-        Span::raw("  token · view · timing · autostart"),
+        Span::raw("  source · token · view · timing · autostart"),
     ]));
     prompt_continue(&welcome)?;
 
-    // Step 1 — Account
-    let mut account = Screen::new("Account · Step 1/4");
-    account.push(Line::from(vec![dim("Step 1"), Span::raw("  "), bold("Discord token")]));
-    account.push(Line::from(dim(
-        "Stored locally; used only to read Spotify and update your status.",
+    // Step 1 — Playback source
+    let mut source_screen = Screen::new("Source · Step 1/4");
+    source_screen.push(Line::from(vec![dim("Step 1"), Span::raw("  "), bold("Music source")]));
+    source_screen.push(Line::from(dim("Where mewsic reads the current track from.")));
+    source_screen.blank();
+    source_screen.push(Line::from(vec![cyan_bold("1"), Span::raw("  Spotify via Discord")]));
+    source_screen.push(Line::from(dim("   Uses the Discord → Spotify connection (no local player).")));
+    source_screen.push(Line::from(vec![cyan_bold("2"), Span::raw("  Last.fm / YouTube Music")]));
+    source_screen.push(Line::from(dim(
+        "   Follows your scrobbles — WebScrobbler or the YT Music desktop app.",
     )));
+    source_screen.blank();
+
+    let default_source = match settings.source {
+        crate::config::Source::Spotify => "spotify",
+        crate::config::Source::Lastfm => "lastfm",
+    };
+    let source_key =
+        prompt_choice(&source_screen, "Choose your music source:", &["spotify", "lastfm"], Some(default_source))?;
+    if let Some(parsed) = crate::config::Source::parse(source_key) {
+        settings.source = parsed;
+    }
+
+    if settings.source == crate::config::Source::Lastfm {
+        let mut lf = Screen::new("Source · Step 1/4");
+        lf.push(Line::from(vec![dim("Step 1"), Span::raw("  "), bold("Last.fm credentials")]));
+        lf.push(Line::from(dim(
+            "Free API key at https://www.last.fm/api/account/create (non-commercial).",
+        )));
+        lf.blank();
+        settings.lastfm.api_key =
+            prompt_text(&lf, "Last.fm API key:", &settings.lastfm.api_key, false)?;
+        settings.lastfm.username =
+            prompt_text(&lf, "Last.fm username:", &settings.lastfm.username, false)?;
+    }
+
+    // Step 2 — Account (Discord token, optional)
+    let mut account = Screen::new("Account · Step 2/4");
+    account.push(Line::from(vec![dim("Step 2"), Span::raw("  "), bold("Discord token")]));
+    account.push(Line::from(dim(
+        "Optional — only needed to update your Discord status.",
+    )));
+    account.push(Line::from(dim("Leave empty to skip; you can add it later in settings.")));
     account.blank();
 
     let token = prompt_text(&account, "Enter your Discord token:", "", true)?;
@@ -427,19 +519,17 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     }
 
     while !settings.token.is_empty() && !connector::validate_token(&settings.token) {
-        let mut bad = Screen::new("Account · Step 1/4");
+        let mut bad = Screen::new("Account · Step 2/4");
         bad.push(Line::from(yellow("That token did not validate. Try again.")));
+        bad.push(Line::from(dim("Press Enter on an empty box to keep it unset.")));
         bad.blank();
         let next = prompt_text(&bad, "Enter your Discord token:", "", true)?;
-        if next.is_empty() {
-            return None;
-        }
         settings.token = next;
     }
 
-    // Step 2 — Preview
-    let mut preview = Screen::new("Preview · Step 2/4");
-    preview.push(Line::from(vec![dim("Step 2"), Span::raw("  "), bold("Status style")]));
+    // Step 3 — Preview
+    let mut preview = Screen::new("Preview · Step 3/5");
+    preview.push(Line::from(vec![dim("Step 3"), Span::raw("  "), bold("Status style")]));
     preview.push(Line::from(dim("How the song text appears in Discord.")));
     preview.blank();
 
@@ -460,9 +550,9 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
             prompt_text(&preview, "Template", &settings.view.advanced.template, false)?;
     }
 
-    // Step 3 — Sync
-    let mut sync = Screen::new("Sync · Step 3/4");
-    sync.push(Line::from(vec![dim("Step 3"), Span::raw("  "), bold("Timing")]));
+    // Step 4 — Sync
+    let mut sync = Screen::new("Sync · Step 4/5");
+    sync.push(Line::from(vec![dim("Step 4"), Span::raw("  "), bold("Timing")]));
     sync.push(Line::from(dim(
         "How early the status changes relative to each lyric line.",
     )));
@@ -480,9 +570,9 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     settings.timing.autooffset =
         prompt_number(&sync, "Autooffset samples", settings.timing.autooffset as u64, 1, 20)? as usize;
 
-    // Step 4 — Maintenance
-    let mut maint = Screen::new("Maintenance · Step 4/4");
-    maint.push(Line::from(vec![dim("Step 4"), Span::raw("  "), bold("Autostart")]));
+    // Step 5 — Maintenance
+    let mut maint = Screen::new("Maintenance · Step 5/5");
+    maint.push(Line::from(vec![dim("Step 5"), Span::raw("  "), bold("Autostart")]));
     maint.push(Line::from(dim("Launch mewsic automatically when you log in.")));
     maint.blank();
 
@@ -527,6 +617,18 @@ fn summary_screen(settings: &crate::config::Settings) -> Screen {
         if settings.token.is_empty() { "missing" } else { "saved" },
         !settings.token.is_empty(),
     ));
+    s.push(kv("Source", settings.source.label(), true));
+    if settings.source == crate::config::Source::Lastfm {
+        s.push(kv(
+            "Last.fm",
+            if settings.lastfm.username.is_empty() {
+                "not configured"
+            } else {
+                &settings.lastfm.username
+            },
+            !settings.lastfm.username.is_empty(),
+        ));
+    }
     s.push(kv(
         "Timestamp",
         if settings.view.timestamp { "on" } else { "off" },
@@ -592,6 +694,17 @@ pub fn summary(settings: &crate::config::Settings) -> String {
         "  Token:      {}\n",
         if settings.token.is_empty() { "missing" } else { "saved" }
     ));
+    out.push_str(&format!("  Source:     {}\n", settings.source.label()));
+    if settings.source == crate::config::Source::Lastfm {
+        out.push_str(&format!(
+            "  Last.fm:    {}\n",
+            if settings.lastfm.username.is_empty() {
+                "not configured"
+            } else {
+                &settings.lastfm.username
+            }
+        ));
+    }
     out.push_str(&format!(
         "  Timestamp:  {}\n",
         if settings.view.timestamp { "on" } else { "off" }
@@ -647,15 +760,16 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
         let mut menu = Screen::new("Settings editor");
         menu.blank();
         menu.push(Line::from(vec![cyan_bold("1"), Span::raw("  Account (Discord token)")]));
-        menu.push(Line::from(vec![cyan_bold("2"), Span::raw("  View (timestamp, label, advanced)")]));
-        menu.push(Line::from(vec![cyan_bold("3"), Span::raw("  Timing (offset, autooffset)")]));
-        menu.push(Line::from(vec![cyan_bold("4"), Span::raw("  Autostart")]));
+        menu.push(Line::from(vec![cyan_bold("2"), Span::raw("  Source (Spotify / Last.fm)")]));
+        menu.push(Line::from(vec![cyan_bold("3"), Span::raw("  View (timestamp, label, advanced)")]));
+        menu.push(Line::from(vec![cyan_bold("4"), Span::raw("  Timing (offset, autooffset)")]));
+        menu.push(Line::from(vec![cyan_bold("5"), Span::raw("  Autostart")]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
         )));
 
-        let choice = prompt_text(&menu, "Choose 1-4 or Enter to save/exit", "", false)?;
+        let choice = prompt_text(&menu, "Choose 1-5 or Enter to save/exit", "", false)?;
         let c = choice.trim().to_lowercase();
 
         if c.is_empty() {
@@ -679,7 +793,38 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                     }
                 }
             }
-            "2" | "view" => {
+            "2" | "source" => {
+                let mut scr = Screen::new("Source");
+                scr.push(Line::from(dim("Where mewsic reads the current track from.")));
+                scr.blank();
+                scr.push(Line::from(vec![cyan_bold("1"), Span::raw("  Spotify via Discord")]));
+                scr.push(Line::from(dim("   Uses the Discord → Spotify connection (no local player).")));
+                scr.push(Line::from(vec![cyan_bold("2"), Span::raw("  Last.fm / YouTube Music")]));
+                scr.push(Line::from(dim(
+                    "   Follows your scrobbles — WebScrobbler or the YT Music desktop app.",
+                )));
+                scr.blank();
+                let default_source = match settings.source {
+                    crate::config::Source::Spotify => "spotify",
+                    crate::config::Source::Lastfm => "lastfm",
+                };
+                let source_key = prompt_choice(
+                    &scr,
+                    "Choose your music source:",
+                    &["spotify", "lastfm"],
+                    Some(default_source),
+                )?;
+                if let Some(parsed) = crate::config::Source::parse(source_key) {
+                    settings.source = parsed;
+                }
+                if settings.source == crate::config::Source::Lastfm {
+                    settings.lastfm.api_key =
+                        prompt_text(&scr, "Last.fm API key", &settings.lastfm.api_key, false)?;
+                    settings.lastfm.username =
+                        prompt_text(&scr, "Last.fm username", &settings.lastfm.username, false)?;
+                }
+            }
+            "3" | "view" => {
                 let mut scr = Screen::new("View");
                 scr.push(Line::from(dim("Toggle how status text is composed.")));
                 scr.blank();
@@ -701,7 +846,7 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                         prompt_text(&scr, "Template", &settings.view.advanced.template, false)?;
                 }
             }
-            "3" | "timing" => {
+            "4" | "timing" => {
                 let mut scr = Screen::new("Timing");
                 scr.push(Line::from(dim("Status send offsets.")));
                 scr.blank();
@@ -722,7 +867,7 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                     20,
                 )? as usize;
             }
-            "4" | "autostart" | "update" => {
+            "5" | "autostart" | "update" => {
                 let mut scr = Screen::new("Autostart");
                 scr.push(Line::from(dim("Launch on login.")));
                 scr.blank();
@@ -731,7 +876,7 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
             }
             _ => {
                 let mut scr = Screen::new("Settings editor");
-                scr.push(Line::from(yellow("Unknown choice — pick 1-4 or press Enter.")));
+                scr.push(Line::from(yellow("Unknown choice — pick 1-5 or press Enter.")));
                 prompt_continue(&scr)?;
                 continue;
             }
@@ -829,7 +974,13 @@ pub fn render_dashboard(ctx: &AppContext) {
         f.render_widget(gauge, chunks[1]);
 
         // Lyrics + source
-        let lyr = vec![info_row("Lyrics", &lyrics), info_row("Source", &source)];
+        let lyr = vec![
+            info_row("Lyrics", &lyrics),
+            info_row(
+                "Source",
+                &format!("{} · {source}", settings.source.label()),
+            ),
+        ];
         f.render_widget(Paragraph::new(lyr).wrap(Wrap { trim: true }), chunks[2]);
 
         // Footer

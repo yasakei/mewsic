@@ -21,8 +21,12 @@ Mewsic runs as a single native binary:
 
 ## Features
 
-- Pulls your current track from the Discord → Spotify connection (no local
-  player required, works on any OS with Discord).
+- Two playback sources, chosen in setup / settings:
+  - **Spotify** — pulled from the Discord → Spotify connection (no local player
+    required, works on any OS with Discord).
+  - **Last.fm** — follows your scrobbles, which also covers **YouTube Music**
+    (via the WebScrobbler extension or the YT Music desktop app's built-in
+    Last.fm scrobbling) and any other scrobbled player.
 - Fetches synced lyrics from LrcLib, NetEase Music, and QQ Music, in that
   order, with an on-disk cache so repeat plays are instant.
 - Sends each line to Discord ahead of time using a fixed offset or an
@@ -37,9 +41,20 @@ Mewsic runs as a single native binary:
 
 ## Requirements
 
-- A Spotify account connected to Discord (Settings → Connections → Spotify).
 - A Discord user token. You can get one by enabling developer mode in Discord
   and copying your token (Account → Advanced).
+- **Spotify source:** a Spotify account connected to Discord (Settings →
+  Connections → Spotify).
+- **Last.fm source:** a free API key (https://www.last.fm/api/account/create)
+  and your Last.fm username. You also need something actively scrobbling to
+  Last.fm — for **YouTube Music** you must install the
+  [WebScrobbler browser extension](https://web-scrobbler.com/) (Firefox /
+  Chrome / Edge), or use the YT Music desktop app's built-in Last.fm
+  scrobbling. Any other scrobbling player works too (Spotify, iTunes, …).
+
+Note: the Last.fm API reports the current track but no playback position, so
+progress is estimated with a local clock. Lyric sync stays accurate while the
+song plays straight through; pauses and seeks are not detected.
 
 ## Building
 
@@ -59,9 +74,10 @@ mewsic stop      # stop the running instance
 mewsic version   # print version
 ```
 
-On first run without a token, Mewsic offers a choice: run the terminal setup
-wizard, or open the web panel and finish setup in the browser. The engine picks
-up the token automatically once it's saved.
+On first run with nothing configured (no Discord token and no Last.fm
+credentials), Mewsic offers a choice: run the terminal setup wizard, or open
+the web panel and finish setup in the browser. The engine picks up the
+configuration automatically once it's saved.
 
 ## Configuration
 
@@ -77,6 +93,7 @@ editor write this file for you, so you usually never touch it by hand.
 | `main.rs`         | CLI entry, PID file, instance guard, run loops        |
 | `engine.rs`       | Poll loop, lyric sync, status sender thread           |
 | `connector.rs`    | Discord token refresh, Spotify playback state         |
+| `lastfm.rs`       | Last.fm playback source (scrobble polling, duration)  |
 | `lyrics.rs`       | Lyric sources (LrcLib/NetEase/QQ), LRC parser, cache  |
 | `sync.rs`         | Status text rendering (offset, template, crop)        |
 | `state.rs`        | Shared playback/tracker state, UI snapshot            |
