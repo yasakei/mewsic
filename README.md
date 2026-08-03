@@ -48,7 +48,7 @@ Mewsic runs as a single native binary:
 - **Last.fm source:** a free API key (https://www.last.fm/api/account/create)
   and your Last.fm username. You also need something actively scrobbling to
   Last.fm — for **YouTube Music** you must install the
-  [WebScrobbler browser extension](https://web-scrobbler.com/) (Firefox /
+  [WebScrobbler browser extension](https://webscrobbler.com/) (Firefox /
   Chrome / Edge), or use the YT Music desktop app's built-in Last.fm
   scrobbling. Any other scrobbling player works too (Spotify, iTunes, …).
 
