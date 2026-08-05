@@ -4,6 +4,7 @@ mod autostart;
 mod config;
 mod connector;
 mod engine;
+mod lastfm;
 mod log;
 mod lyrics;
 mod net;
@@ -98,10 +99,14 @@ fn run(with_web: bool) {
         tui::enable_raw();
     }
 
-    // First run with no token: offer a choice.
+    // First run with nothing configured: offer a choice. A Last.fm setup that
+    // deliberately skipped the Discord token is considered configured.
     let mut with_web = with_web;
-    let token_empty = ctx.settings.read().unwrap().token.is_empty();
-    if token_empty && interactive && !with_web {
+    let needs_setup = {
+        let s = ctx.settings.read().unwrap();
+        s.token.is_empty() && (s.lastfm.api_key.is_empty() || s.lastfm.username.is_empty())
+    };
+    if needs_setup && interactive && !with_web {
         match tui::choose_startup_mode() {
             tui::StartupMode::Terminal => {
                 if tui::run_setup_wizard(&ctx).is_none() {

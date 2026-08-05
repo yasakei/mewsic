@@ -42,6 +42,10 @@ pub struct Tracker {
     /// Rolling latency samples (ms) for autooffset.
     pub latencies: Vec<u64>,
     pub last_latency: u64,
+    /// Last.fm only: estimated detection lag (ms) — how long ago the current
+    /// song started before the poller first noticed it. `None` until measured
+    /// or when the estimate isn't trustworthy.
+    pub lastfm_lag: Option<u64>,
 }
 
 impl Tracker {

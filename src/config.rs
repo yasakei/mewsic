@@ -31,14 +31,58 @@ pub fn config_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
+/// Which playback source the engine polls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Source {
+    /// Spotify, via the OAuth token Discord holds (the original backend).
+    #[default]
+    Spotify,
+    /// Last.fm, via its public scrobble API (api key + username). Covers
+    /// YouTube Music and any other web player once scrobbled — e.g. with the
+    /// WebScrobbler extension or the YT Music desktop app's built-in
+    /// Last.fm integration.
+    Lastfm,
+}
+
+impl Source {
+    pub fn label(self) -> &'static str {
+        match self {
+            Source::Spotify => "Spotify",
+            Source::Lastfm => "Last.fm",
+        }
+    }
+
+    /// Parse a user-typed choice (case-insensitive) back into a source.
+    pub fn parse(input: &str) -> Option<Source> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "spotify" | "sp" | "discord" | "dc" => Some(Source::Spotify),
+            "lastfm" | "last.fm" | "lf" | "ytmusic" | "ytm" => Some(Source::Lastfm),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     /// Discord user token — the only credential.
     pub token: String,
+    /// Playback backend: Spotify, Last.fm or local MPRIS players.
+    pub source: Source,
+    pub lastfm: LastFmSettings,
     pub view: ViewSettings,
     pub timing: TimingSettings,
     pub update: UpdateSettings,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LastFmSettings {
+    /// Last.fm API key (https://www.last.fm/api/account/create).
+    pub api_key: String,
+    /// Last.fm username whose scrobbles to follow.
+    pub username: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,4 +262,51 @@ fn read_legacy_json(path: &Path) -> Option<Settings> {
     }
 
     Some(settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_defaults_to_spotify() {
+        let s = Settings::default();
+        assert_eq!(s.source, Source::Spotify);
+    }
+
+    #[test]
+    fn source_parse_aliases() {
+        assert_eq!(Source::parse("spotify"), Some(Source::Spotify));
+        assert_eq!(Source::parse("SP"), Some(Source::Spotify));
+        assert_eq!(Source::parse("lastfm"), Some(Source::Lastfm));
+        assert_eq!(Source::parse("last.fm"), Some(Source::Lastfm));
+        assert_eq!(Source::parse("ytmusic"), Some(Source::Lastfm));
+        assert_eq!(Source::parse("ytm"), Some(Source::Lastfm));
+        assert_eq!(Source::parse("slack"), None);
+    }
+
+    #[test]
+    fn serde_roundtrip_keeps_source() {
+        let mut s = Settings::default();
+        s.source = Source::Lastfm;
+        s.lastfm.api_key = "abc".into();
+        s.lastfm.username = "someone".into();
+        let raw = toml::to_string(&s).unwrap();
+        assert!(raw.contains("source = \"lastfm\""));
+        let back: Settings = toml::from_str(&raw).unwrap();
+        assert_eq!(back.source, Source::Lastfm);
+        assert_eq!(back.lastfm.username, "someone");
+    }
+
+    #[test]
+    fn legacy_settings_have_no_source() {
+        // A settings.json without a `source` must migrate to the default.
+        let dir = std::env::temp_dir().join(format!("mewsic-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        fs::write(dir.join("settings.json"), r#"{"credentials":{"token":"t"}}"#).unwrap();
+        let s = Settings::load(&dir);
+        assert_eq!(s.source, Source::Spotify);
+        assert_eq!(s.token, "t");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

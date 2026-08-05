@@ -5,12 +5,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::connector::{self, FetchError};
 use crate::lyrics::LyricsFetcher;
 use crate::state::AppContext;
 use crate::sync::build_status;
+
+/// Last.fm line-offset fallback (ms) when the detection lag couldn't be
+/// measured (no scrobble history, a long pause, or the app started mid-song).
+const DEFAULT_LASTFM_LAG_MS: u64 = 3_000;
+
+/// Current wall clock as Unix seconds (0 on clock errors).
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 /// Messages sent from the tick loop to the Discord sender thread.
 enum StatusMsg {
@@ -113,10 +125,23 @@ impl Engine {
             return;
         }
 
-        let offset = if settings.timing.enable_autooffset {
+        let allowance = if settings.timing.enable_autooffset {
             tracker.avg_latency().saturating_add(100)
         } else {
             settings.timing.send_time_offset
+        };
+        // Last.fm has no playback position: the local clock only starts when
+        // the nowplaying track is *first seen*, which is a few seconds after
+        // it began playing. Compensate with the measured detection lag (or a
+        // sane default when it couldn't be estimated). Spotify reports an
+        // exact position, so it keeps the plain allowance.
+        let offset = if settings.source == crate::config::Source::Lastfm {
+            tracker
+                .lastfm_lag
+                .unwrap_or(DEFAULT_LASTFM_LAG_MS)
+                .saturating_add(allowance)
+        } else {
+            allowance
         };
         let threshold = playback.song_progress.saturating_add(offset);
 
@@ -171,13 +196,13 @@ impl Engine {
         let quit = self.quit.clone();
         thread::spawn(move || {
             let mut fetcher = LyricsFetcher::new(&ctx.config_dir);
-            let mut spotify_token: Option<String> = None;
+            let mut state = PollerState::default();
             let mut last = Instant::now();
             while !quit.load(Ordering::SeqCst) {
                 let now = Instant::now();
                 if now.duration_since(last) >= Duration::from_millis(2000) {
                     last = now;
-                    poll_once(&ctx, &mut fetcher, &mut spotify_token);
+                    poll_once(&ctx, &mut fetcher, &mut state);
                 }
                 thread::sleep(Duration::from_millis(200));
             }
@@ -189,26 +214,52 @@ impl Engine {
     }
 }
 
+/// Per-thread state kept between poll cycles (cached tokens, last source).
+#[derive(Default)]
+struct PollerState {
+    /// Cached Spotify token from the Discord connections endpoint.
+    spotify_token: Option<String>,
+    /// The source used on the previous cycle, to avoid spamming the log when
+    /// a source's prerequisites are missing.
+    last_logged_source: Option<crate::config::Source>,
+}
+
 /// One poll cycle: refresh the Spotify token when needed, fetch player state,
 /// detect song changes and refresh lyrics when needed.
-fn poll_once(ctx: &AppContext, fetcher: &mut LyricsFetcher, spotify_token: &mut Option<String>) {
-    let token = ctx.settings.read().unwrap().token.clone();
-    if token.is_empty() {
-        return;
-    }
+fn poll_once(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerState) {
+    let settings = ctx.settings.read().unwrap();
+    let source = settings.source;
+    let token = settings.token.clone();
+    drop(settings);
 
+    match source {
+        crate::config::Source::Spotify => {
+            // The Discord token is only *required* for Spotify (it's what
+            // unlocks the Spotify OAuth token). Last.fm works without it —
+            // the status just won't be updated.
+            if token.is_empty() {
+                return;
+            }
+            poll_spotify(ctx, fetcher, poller, &token);
+        }
+        crate::config::Source::Lastfm => poll_lastfm(ctx, fetcher, poller),
+    }
+}
+
+/// Spotify cycle: token refresh via Discord, then the public player endpoint.
+fn poll_spotify(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerState, token: &str) {
     // Fetch the Spotify token lazily and cache it; only refresh on 401 so we
     // don't hammer Discord's connections endpoint every 2 s.
-    if spotify_token.is_none() {
-        match connector::fetch_spotify_token(&token) {
-            Ok(t) => *spotify_token = Some(t),
+    if poller.spotify_token.is_none() {
+        match connector::fetch_spotify_token(token) {
+            Ok(t) => poller.spotify_token = Some(t),
             Err(e) => {
                 crate::log::write(&format!("spotify token refresh failed: {e:?}"));
                 return;
             }
         }
     }
-    let spotify = spotify_token.as_ref().unwrap();
+    let spotify = poller.spotify_token.as_ref().unwrap();
 
     let request_start = Instant::now();
     let state = match connector::fetch_player(spotify) {
@@ -219,7 +270,7 @@ fn poll_once(ctx: &AppContext, fetcher: &mut LyricsFetcher, spotify_token: &mut 
         }
         Err(FetchError::Unauthorized) => {
             // Token expired — drop it and refetch next cycle.
-            *spotify_token = None;
+            poller.spotify_token = None;
             crate::log::write("spotify player returned 401, refreshing token");
             return;
         }
@@ -231,26 +282,92 @@ fn poll_once(ctx: &AppContext, fetcher: &mut LyricsFetcher, spotify_token: &mut 
     // Compensate for the network round-trip so progress stays accurate.
     let rtt = request_start.elapsed().as_millis() as u64;
 
-    let song_changed = {
-        let mut playback = ctx.shared.playback.lock().unwrap();
-        playback.is_playing = state.is_playing;
-        playback.song_progress = state.progress_ms.saturating_add(rtt);
-        playback.song_duration = state.duration_ms;
+    let song_changed = apply_state(ctx, &state, Some(state.progress_ms.saturating_add(rtt)));
+    sync_lyrics(ctx, fetcher, song_changed);
+}
 
-        if playback.song_id != state.track_id {
-            playback.old_song_id = playback.song_id.clone();
-            playback.song_id = state.track_id;
-            playback.song_name = connector::cleanup_title(&state.name);
-            playback.song_author = state.artist;
-            playback.lyrics = None;
-            playback.current_line = None;
-            playback.has_lyrics = false;
-            true
-        } else {
-            false
+/// Last.fm cycle: poll the user's scrobbles. No playback position is exposed,
+/// so progress is left to the local tick clock (see [`apply_state`]).
+fn poll_lastfm(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerState) {
+    let settings = ctx.settings.read().unwrap();
+    let api_key = settings.lastfm.api_key.clone();
+    let username = settings.lastfm.username.clone();
+    drop(settings);
+
+    if api_key.is_empty() || username.is_empty() {
+        if poller.last_logged_source != Some(crate::config::Source::Lastfm) {
+            crate::log::write("last.fm source selected but no api key/username set");
+            poller.last_logged_source = Some(crate::config::Source::Lastfm);
+        }
+        ctx.shared.playback.lock().unwrap().is_playing = false;
+        return;
+    }
+    poller.last_logged_source = None;
+
+    let (state, prev_uts) = match crate::lastfm::fetch_player(&api_key, &username) {
+        Ok(Some((s, p))) => (s, p),
+        Ok(None) => {
+            ctx.shared.tracker.lock().unwrap().lastfm_lag = None;
+            ctx.shared.playback.lock().unwrap().is_playing = false;
+            return;
+        }
+        Err(e) => {
+            crate::log::write(&format!("last.fm player error: {e:?}"));
+            return;
         }
     };
 
+    // The previous completed scrobble's end time is only meaningful *at the
+    // moment the song changes*: it's an upper bound for when the current song
+    // started, i.e. how far into it the poller was when it first noticed it.
+    // Measured later in the song it drifts (it's just the song's age), so take
+    // it exactly once per track. Untrusted estimates (pause, gap, late start)
+    // fall back to a default when the offset is read.
+    let song_changed = {
+        let pb = ctx.shared.playback.lock().unwrap();
+        pb.song_id != state.track_id
+    };
+    if song_changed {
+        let lag = prev_uts.and_then(|p| crate::lastfm::measure_lag(now_unix_secs(), p));
+        ctx.shared.tracker.lock().unwrap().lastfm_lag = lag;
+    }
+
+    let song_changed = apply_state(ctx, &state, None);
+    sync_lyrics(ctx, fetcher, song_changed);
+}
+
+/// Push a fetched player state into shared playback. When `progress_ms` is
+/// `Some`, it wins over the local clock (Spotify/MPRIS report real position);
+/// when `None` (Last.fm), progress keeps being advanced by the tick loop and
+/// is reset to zero on song change. Returns `true` when the song changed.
+fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Option<u64>) -> bool {
+    let mut playback = ctx.shared.playback.lock().unwrap();
+    let song_changed = playback.song_id != state.track_id;
+
+    playback.is_playing = state.is_playing;
+    playback.song_duration = state.duration_ms;
+    if let Some(p) = progress_ms {
+        playback.song_progress = p;
+    }
+
+    if song_changed {
+        playback.old_song_id = playback.song_id.clone();
+        playback.song_id = state.track_id.clone();
+        playback.song_name = connector::cleanup_title(&state.name);
+        playback.song_author = state.artist.clone();
+        playback.lyrics = None;
+        playback.current_line = None;
+        playback.has_lyrics = false;
+        if progress_ms.is_none() {
+            // Last.fm: no position data, so (re)start the local clock.
+            playback.song_progress = 0;
+        }
+    }
+    song_changed
+}
+
+/// Fetch lyrics when the song changed (or none are loaded yet).
+fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool) {
     // Lyrics already present and the song hasn't changed — nothing to do.
     if !song_changed && ctx.shared.playback.lock().unwrap().has_lyrics {
         return;
