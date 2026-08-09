@@ -6,6 +6,9 @@ use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::process::Command;
 
+// `APP_NAME` and `command_for_autostart` are only used by the Linux and
+// Windows autostart backends; macOS builds its LaunchAgent plist directly.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 const APP_NAME: &str = "mewsic";
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -13,6 +16,7 @@ fn home() -> PathBuf {
     std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn command_for_autostart() -> String {
     // Reuse the current executable + a `background` argument so login launches
     // a detached daemon (with the web panel) that survives the terminal and
