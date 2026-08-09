@@ -26,16 +26,25 @@ const HELP: &str = "\
 mewsic — keep your Discord status in sync with the song you're playing.
 
 USAGE:
-  mewsic                Run the dashboard + engine
-  mewsic web            Run the engine with the web panel enabled
-  mewsic setup          Interactive first-time setup
-  mewsic settings       Edit settings interactively
-  mewsic stop           Stop the running instance
-  mewsic version        Print version
+  mewsic                    Run the dashboard + engine
+  mewsic web                Run the engine with the web panel enabled
+  mewsic background         Run detached in the background — keeps playing
+                            after this terminal closes
+  mewsic setup              Interactive first-time setup
+  mewsic settings           Edit settings interactively
+  mewsic stop               Stop the running foreground instance
+  mewsic kill background    Stop the background instance
+  mewsic kill autostart     Disable autostart (start-on-login)
+  mewsic version            Print version
 
 ENVIRONMENT:
   MEWSIC_CONFIG_DIR     Override the config directory (default ~/.config/mewsic)
 ";
+
+/// CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS: keep the daemon out of the
+/// console's process group so closing the console window doesn't kill it.
+#[cfg(windows)]
+const DETACHED_SPAWN_FLAGS: u32 = 0x0000_0200 | 0x0000_0008;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -53,6 +62,9 @@ fn main() {
         "settings" => settings(),
         "web" => run(true),
         "run" => run(false),
+        "background" => background(),
+        "kill" => kill(args.get(1).map(|s| s.as_str())),
+        "_background" => background_child(),
         other => {
             eprintln!("unknown command: {other}\n");
             println!("{HELP}");
@@ -76,20 +88,19 @@ fn init_context() -> Arc<AppContext> {
 fn run(with_web: bool) {
     let ctx = init_context();
 
-    // Refuse to run a second live instance (mirrors the original start script).
-    let pid_file = config::config_dir().join("mewsic.pid");
-    if let Ok(raw) = std::fs::read_to_string(&pid_file) {
-        if let Ok(pid) = raw.trim().parse::<u32>() {
-            if process_alive(pid) {
-                eprintln!("mewsic is already running (pid {pid}). Run `mewsic stop` first.");
-                std::process::exit(1);
-            }
-        }
+    // Refuse to run a second live instance — check both the foreground and
+    // background PID files so a dashboard and a daemon never fight over the
+    // Discord status.
+    if let Some((pid, file)) = running_instance() {
+        eprintln!(
+            "mewsic is already running (pid {pid}, {file}). Run `mewsic stop` or `mewsic kill background` first."
+        );
+        std::process::exit(1);
     }
 
     // Write a PID file so `mewsic stop` can find this instance. The guard
     // removes it on clean exit.
-    let _pid = PidGuard::new(pid_file);
+    let _pid = PidGuard::new(config::config_dir().join("mewsic.pid"));
 
     // Enter the TUI session up front when interactive: the startup wizard and
     // settings screens render through ratatui, so the terminal must be ready
@@ -124,11 +135,10 @@ fn run(with_web: bool) {
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
 
-    if with_web {
-        web::start(&ctx);
-    }
-
     if interactive {
+        if with_web {
+            web::start(&ctx);
+        }
         let mut last_tick = Instant::now();
         let mut last_render = Instant::now();
         loop {
@@ -149,18 +159,196 @@ fn run(with_web: bool) {
         tui::disable_raw();
     } else {
         // Headless: keep ticking quietly until stopped.
-        let mut last_tick = Instant::now();
-        while !engine.quit().load(Ordering::SeqCst) {
-            let now = Instant::now();
-            let delta = now.duration_since(last_tick).as_millis() as u64;
-            last_tick = now;
-            engine.tick(delta);
-            thread::sleep(Duration::from_millis(250));
-        }
+        run_headless(&ctx, &engine, with_web);
     }
 
     engine.shutdown();
     log::write("mewsic stopped");
+}
+
+/// Tick the engine in a loop without a TUI until `quit` is signalled.
+fn run_headless(ctx: &Arc<AppContext>, engine: &Arc<engine::Engine>, with_web: bool) {
+    if with_web {
+        web::start(ctx);
+    }
+    let mut last_tick = Instant::now();
+    while !engine.quit().load(Ordering::SeqCst) {
+        let now = Instant::now();
+        let delta = now.duration_since(last_tick).as_millis() as u64;
+        last_tick = now;
+        engine.tick(delta);
+        thread::sleep(Duration::from_millis(250));
+    }
+}
+
+/// The pid + pid-file name of a live instance already running, if any.
+/// Stale PID files (dead processes) are ignored and overwritten on start.
+fn running_instance() -> Option<(u32, String)> {
+    for name in ["mewsic.pid", "background.pid"] {
+        let path = config::config_dir().join(name);
+        if let Ok(raw) = std::fs::read_to_string(&path) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                if process_alive(pid) {
+                    return Some((pid, name.to_string()));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// `mewsic background`: spawn a detached copy of this binary (the internal
+/// `_background` command) and return immediately. The child survives the
+/// terminal closing, so playback keeps going.
+fn background() {
+    if let Some((pid, _file)) = running_instance() {
+        eprintln!(
+            "mewsic is already running (pid {pid}). Run `mewsic stop` or `mewsic kill background` first."
+        );
+        std::process::exit(1);
+    }
+
+    let exe = match std::env::current_exe() {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("could not locate the mewsic executable: {e}");
+            std::process::exit(1);
+        }
+    };
+    let cfg_dir = config::config_dir();
+    let _ = std::fs::create_dir_all(&cfg_dir);
+
+    // Detach the child: on Unix it gets its own process group so the SIGHUP a
+    // closing terminal sends to the foreground group can't touch it; on Windows
+    // it gets a fresh process group with no console attached, so closing the
+    // console window can't kill it either.
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.arg("_background")
+        .current_dir(&cfg_dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(DETACHED_SPAWN_FLAGS);
+    }
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("could not start the background engine: {e}");
+            std::process::exit(1);
+        }
+    };
+    let pid = child.id();
+
+    // Wait briefly for the child to write its PID file, so we can report
+    // whether it actually came up (e.g. it might have been rejected because
+    // another instance started in the meantime).
+    let deadline = Instant::now() + Duration::from_millis(1000);
+    loop {
+        if child.try_wait().ok().flatten().is_some() {
+            eprintln!(
+                "background engine exited immediately. Check {} for details.",
+                cfg_dir.join("log.txt").display()
+            );
+            std::process::exit(1);
+        }
+        let confirmed = std::fs::read_to_string(cfg_dir.join("background.pid"))
+            .map(|raw| raw.trim().parse::<u32>() == Ok(pid))
+            .unwrap_or(false);
+        if confirmed || Instant::now() >= deadline {
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    println!("Background engine started (pid {pid}).");
+    println!("It keeps playing after this terminal closes — stop it with `mewsic kill background`.");
+}
+
+/// Internal entry point of the detached child spawned by [`background`].
+fn background_child() {
+    let ctx = init_context();
+    if let Some((pid, _file)) = running_instance() {
+        crate::log::write(&format!(
+            "background start refused: instance already running (pid {pid})"
+        ));
+        std::process::exit(1);
+    }
+    let _pid = PidGuard::new(config::config_dir().join("background.pid"));
+    crate::log::write(&format!("background engine started (pid {})", std::process::id()));
+
+    let engine = engine::Engine::new(ctx.clone());
+    engine.spawn_poller();
+    run_headless(&ctx, &engine, true);
+    engine.shutdown();
+    crate::log::write("background engine stopped");
+}
+
+/// `mewsic kill <target>` — stop the background daemon or disable autostart.
+fn kill(target: Option<&str>) {
+    match target {
+        Some("background") => kill_background(),
+        Some("autostart") => kill_autostart(),
+        _ => {
+            eprintln!("usage: mewsic kill <background | autostart>\n");
+            println!("{HELP}");
+            std::process::exit(2);
+        }
+    }
+}
+
+fn kill_background() {
+    let pid_file: PathBuf = config::config_dir().join("background.pid");
+    let raw = match std::fs::read_to_string(&pid_file) {
+        Ok(r) => r,
+        Err(_) => {
+            println!("No background mewsic found.");
+            return;
+        }
+    };
+    let pid: u32 = match raw.trim().parse() {
+        Ok(p) => p,
+        Err(_) => {
+            println!("Invalid pid file.");
+            let _ = std::fs::remove_file(&pid_file);
+            return;
+        }
+    };
+    if !process_alive(pid) {
+        println!("background mewsic (pid {pid}) is not running.");
+        let _ = std::fs::remove_file(&pid_file);
+        return;
+    }
+    if send_terminate(pid) {
+        println!("Sent termination signal to background mewsic (pid {pid}).");
+    } else {
+        println!("Failed to signal background mewsic (pid {pid}).");
+    }
+    let _ = std::fs::remove_file(&pid_file);
+}
+
+fn kill_autostart() {
+    let ctx = init_context();
+    {
+        let mut settings = ctx.settings.write().unwrap();
+        settings.update.auto_start = false;
+        let _ = settings.save(&ctx.config_dir);
+    }
+    crate::autostart::apply(false);
+    println!("Autostart disabled — mewsic won't start on login anymore.");
+    if let Some((pid, _file)) = running_instance() {
+        println!(
+            "A running instance (pid {pid}) keeps playing until stopped with `mewsic kill background` or `mewsic stop`."
+        );
+    }
 }
 
 /// Removes its PID file when dropped.
@@ -219,7 +407,13 @@ fn stop() {
     let raw = match std::fs::read_to_string(&pid_file) {
         Ok(r) => r,
         Err(_) => {
-            println!("No running mewsic found.");
+            if let Some((pid, _file)) = running_instance() {
+                println!(
+                    "No foreground instance. A background instance is running (pid {pid}) — use `mewsic kill background`."
+                );
+            } else {
+                println!("No running mewsic found.");
+            }
             return;
         }
     };

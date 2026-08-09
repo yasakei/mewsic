@@ -36,8 +36,11 @@ Mewsic runs as a single native binary:
   template.
 -  Terminal dashboard with live progress bar, plus a web panel served on
   `http://127.0.0.1:8999`.
-- `setup` wizard, interactive settings editor, autostart on login, and a
-  `stop` command via PID file.
+- Detached background mode: `mewsic background` keeps playing after the
+  terminal closes, stopped with `mewsic kill background`.
+- `setup` wizard, interactive settings editor, autostart on login (launches a
+  background daemon), and `stop` / `kill` commands via PID files. Autostart
+  can be turned off with `mewsic kill autostart` or in the settings editor.
 
 ## Requirements
 
@@ -66,13 +69,21 @@ cargo build --release
 ## Usage
 
 ```sh
-mewsic           # run the dashboard + engine
-mewsic web       # run the engine with the web panel enabled
-mewsic setup     # interactive first-time setup
-mewsic settings  # edit settings interactively
-mewsic stop      # stop the running instance
-mewsic version   # print version
+mewsic                 # run the dashboard + engine
+mewsic web             # run the engine with the web panel enabled
+mewsic background      # run detached — keeps playing after the terminal closes
+mewsic setup           # interactive first-time setup
+mewsic settings        # edit settings interactively
+mewsic stop            # stop the running foreground instance
+mewsic kill background # stop the background instance
+mewsic kill autostart  # disable autostart (start-on-login)
+mewsic version         # print version
 ```
+
+Autostart is enabled from the setup wizard, the settings editor (Ctrl+S from
+the dashboard) or the web panel; it launches a background daemon that survives
+the terminal session. Run `mewsic kill autostart` (or toggle it off in
+settings) to stop mewsic from starting on login.
 
 On first run with nothing configured (no Discord token and no Last.fm
 credentials), Mewsic offers a choice: run the terminal setup wizard, or open
