@@ -14,11 +14,12 @@ fn home() -> PathBuf {
 }
 
 fn command_for_autostart() -> String {
-    // Reuse the current executable + a `run` argument so login launches the
-    // engine (web panel enabled, headless-safe).
+    // Reuse the current executable + a `background` argument so login launches
+    // a detached daemon (with the web panel) that survives the terminal and
+    // keeps updating the status. `mewsic kill background` stops it.
     match std::env::current_exe() {
-        Ok(exe) => format!("\"{}\" run", exe.to_string_lossy()),
-        Err(_) => "mewsic run".to_string(),
+        Ok(exe) => format!("\"{}\" background", exe.to_string_lossy()),
+        Err(_) => "mewsic background".to_string(),
     }
 }
 
@@ -81,7 +82,7 @@ fn macos_autostart(enabled: bool) -> Result<(), String> {
          \x20 <key>ProgramArguments</key>\n\
          \x20 <array>\n\
          \x20 \x20 <string>{}</string>\n\
-         \x20 \x20 <string>run</string>\n\
+         \x20 \x20 <string>background</string>\n\
          \x20 </array>\n\
          \x20 <key>RunAtLoad</key><true/>\n\
          </dict>\n</plist>\n",
