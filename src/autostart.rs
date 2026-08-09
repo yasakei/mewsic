@@ -1,7 +1,9 @@
 //! Best-effort autostart: `.desktop` file on Linux, LaunchAgent on macOS,
 //! HKCU Run registry entry on Windows.
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::process::Command;
