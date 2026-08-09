@@ -287,8 +287,10 @@ mod tests {
 
     #[test]
     fn serde_roundtrip_keeps_source() {
-        let mut s = Settings::default();
-        s.source = Source::Lastfm;
+        let mut s = Settings {
+            source: Source::Lastfm,
+            ..Settings::default()
+        };
         s.lastfm.api_key = "abc".into();
         s.lastfm.username = "someone".into();
         let raw = toml::to_string(&s).unwrap();
