@@ -1,6 +1,8 @@
 //! Configuration loading, saving and migration.
 //!
-//! Mewsic stores settings as TOML at `~/.config/mewsic/settings.toml`. On first
+//! Mewsic stores settings as TOML at `~/.config/mewsic/settings.toml`. The
+//! Discord token is *not* written there — it lives in the OS credential
+//! manager (see `crate::credential`), so the file holds no secrets. On first
 //! launch it can migrate a legacy `settings.json` (from the old Node app) so
 //! existing tokens keep working.
 
@@ -66,7 +68,9 @@ impl Source {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Discord user token — the only credential.
+    /// Discord user token — the only credential. Kept in the OS credential
+    /// manager rather than `settings.toml`; `save` moves it there.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub token: String,
     /// Playback backend: Spotify, Last.fm or local MPRIS players.
     pub source: Source,
@@ -151,39 +155,102 @@ impl Default for TimingSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
     /// Launch on login.
     pub auto_start: bool,
+    /// Check for and auto-install releases in the background.
+    pub auto_check: bool,
+}
+
+impl Default for UpdateSettings {
+    fn default() -> Self {
+        UpdateSettings {
+            auto_start: false,
+            auto_check: true,
+        }
+    }
 }
 
 impl Settings {
     /// Load settings from `dir/settings.toml`, falling back to defaults and
     /// attempting a migration from a legacy `settings.json` in the same dir.
+    /// The Discord token is pulled from the credential store; a token left in
+    /// the plaintext file by an older version is kept until the next `save`
+    /// moves it out.
     pub fn load(dir: &Path) -> Settings {
         let path = dir.join("settings.toml");
-        if let Ok(raw) = fs::read_to_string(&path) {
+        let mut settings = if let Ok(raw) = fs::read_to_string(&path) {
             if let Ok(settings) = toml::from_str::<Settings>(&raw) {
-                return settings;
+                settings
+            } else {
+                default_with_migration(dir)
             }
-        }
+        } else {
+            default_with_migration(dir)
+        };
 
-        let mut settings = Settings::default();
-        if let Some(migrated) = migrate_legacy(dir) {
-            settings = migrated;
+        if let Some(stored) = crate::credential::load_token(dir) {
+            settings.token = stored;
+        } else if !settings.token.is_empty() {
+            // A legacy token left in plaintext settings.toml by an older
+            // version: move it into the credential store and strip the file
+            // copy right away so it isn't left exposed.
+            if crate::credential::store_token(dir, &settings.token).is_ok() {
+                let mut stripped = settings.clone();
+                stripped.token = String::new();
+                let _ = Self::write_toml(dir, &stripped);
+            }
         }
         settings
     }
 
-    /// Persist to `dir/settings.toml`, creating the directory if needed.
+    /// Persist settings to `dir/settings.toml`, creating the directory if
+    /// needed. The token is written to the credential store instead of the
+    /// file; `settings.toml` itself is chmodded 0600 so the Last.fm key stays
+    /// private too.
     pub fn save(&self, dir: &Path) -> Result<(), String> {
         let _ = fs::create_dir_all(dir);
+        let mut file_settings = self.clone();
+        if self.token.is_empty() {
+            crate::credential::clear_token(dir);
+        } else {
+            match crate::credential::store_token(dir, &self.token) {
+                Ok(()) => file_settings.token = String::new(),
+                Err(e) => crate::log::write(&format!(
+                    "credential store unavailable; token stays in settings.toml ({e})"
+                )),
+            }
+        }
+        Self::write_toml(dir, &file_settings)
+    }
+
+    fn write_toml(dir: &Path, settings: &Settings) -> Result<(), String> {
         let path = dir.join("settings.toml");
-        let raw = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(&path, raw).map_err(|e| e.to_string())
+        let raw = toml::to_string_pretty(settings).map_err(|e| e.to_string())?;
+        fs::write(&path, raw).map_err(|e| e.to_string())?;
+        restrict_permissions(&path);
+        Ok(())
     }
 }
+
+fn default_with_migration(dir: &Path) -> Settings {
+    let mut settings = Settings::default();
+    if let Some(migrated) = migrate_legacy(dir) {
+        settings = migrated;
+    }
+    settings
+}
+
+#[cfg(unix)]
+fn restrict_permissions(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+}
+
+#[cfg(not(unix))]
+fn restrict_permissions(_path: &Path) {}
 
 /// Import a legacy `settings.json` (the old Node app format) if present.
 /// Checks the config dir first, then the current working directory.
@@ -268,6 +335,10 @@ fn read_legacy_json(path: &Path) -> Option<Settings> {
 mod tests {
     use super::*;
 
+    // Tests that override the keyring entry env vars touch process-global
+    // state, so they must not interleave with each other.
+    static KEYRING_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn source_defaults_to_spotify() {
         let s = Settings::default();
@@ -303,12 +374,45 @@ mod tests {
     #[test]
     fn legacy_settings_have_no_source() {
         // A settings.json without a `source` must migrate to the default.
+        let _guard = KEYRING_ENV_LOCK.lock().unwrap();
+        std::env::set_var("MEWSIC_KEYRING_SERVICE", "mewsic-legacy-test");
+        std::env::set_var("MEWSIC_KEYRING_USER", "legacy-user");
         let dir = std::env::temp_dir().join(format!("mewsic-test-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         fs::write(dir.join("settings.json"), r#"{"credentials":{"token":"t"}}"#).unwrap();
         let s = Settings::load(&dir);
         assert_eq!(s.source, Source::Spotify);
         assert_eq!(s.token, "t");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn token_is_never_written_to_settings_toml() {
+        let _guard = KEYRING_ENV_LOCK.lock().unwrap();
+        std::env::set_var("MEWSIC_KEYRING_SERVICE", "mewsic-token-test");
+        std::env::set_var("MEWSIC_KEYRING_USER", "token-test");
+        let dir = std::env::temp_dir().join(format!("mewsic-token-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+
+        let s = Settings {
+            token: "super-secret".into(),
+            ..Settings::default()
+        };
+        s.save(&dir).unwrap();
+
+        let raw = fs::read_to_string(dir.join("settings.toml")).unwrap();
+        assert!(
+            !raw.contains("super-secret"),
+            "token must not be written to settings.toml:\n{raw}"
+        );
+
+        let loaded = Settings::load(&dir);
+        assert_eq!(loaded.token, "super-secret");
+
+        let cleared = Settings::default();
+        cleared.save(&dir).unwrap();
+        assert_eq!(Settings::load(&dir).token, "", "clearing must drop the credential");
+
         let _ = fs::remove_dir_all(&dir);
     }
 }
