@@ -578,6 +578,8 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
 
     settings.update.auto_start =
         prompt_confirm(&maint, "Enable auto-start on login?", settings.update.auto_start)?;
+    settings.update.auto_check =
+        prompt_confirm(&maint, "Auto-check for updates?", settings.update.auto_check)?;
 
     {
         *ctx.settings.write().unwrap() = settings.clone();
@@ -679,6 +681,11 @@ fn summary_screen(settings: &crate::config::Settings) -> Screen {
         if settings.update.auto_start { "on" } else { "off" },
         settings.update.auto_start,
     ));
+    s.push(kv(
+        "Auto update",
+        if settings.update.auto_check { "on" } else { "off" },
+        settings.update.auto_check,
+    ));
     s
 }
 
@@ -738,6 +745,10 @@ pub fn summary(settings: &crate::config::Settings) -> String {
         "  Auto start: {}\n",
         if settings.update.auto_start { "on" } else { "off" }
     ));
+    out.push_str(&format!(
+        "  Auto update:{}\n",
+        if settings.update.auto_check { "on" } else { "off" }
+    ));
     out
 }
 
@@ -764,12 +775,13 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
         menu.push(Line::from(vec![cyan_bold("3"), Span::raw("  View (timestamp, label, advanced)")]));
         menu.push(Line::from(vec![cyan_bold("4"), Span::raw("  Timing (offset, autooffset)")]));
         menu.push(Line::from(vec![cyan_bold("5"), Span::raw("  Autostart")]));
+        menu.push(Line::from(vec![cyan_bold("6"), Span::raw("  Update (auto-check, check now)")]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
         )));
 
-        let choice = prompt_text(&menu, "Choose 1-5 or Enter to save/exit", "", false)?;
+        let choice = prompt_text(&menu, "Choose 1-6 or Enter to save/exit", "", false)?;
         let c = choice.trim().to_lowercase();
 
         if c.is_empty() {
@@ -867,16 +879,25 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                     20,
                 )? as usize;
             }
-            "5" | "autostart" | "update" => {
+            "5" | "autostart" => {
                 let mut scr = Screen::new("Autostart");
                 scr.push(Line::from(dim("Launch on login.")));
                 scr.blank();
                 settings.update.auto_start =
                     prompt_confirm(&scr, "Enable auto-start on login?", settings.update.auto_start)?;
             }
+            "6" | "update" => {
+                let mut scr = Screen::new("Update");
+                scr.push(Line::from(dim(
+                    "Auto-updates check GitHub releases in the background and install the new binary.",
+                )));
+                scr.blank();
+                settings.update.auto_check =
+                    prompt_confirm(&scr, "Auto-check for updates?", settings.update.auto_check)?;
+            }
             _ => {
                 let mut scr = Screen::new("Settings editor");
-                scr.push(Line::from(yellow("Unknown choice — pick 1-5 or press Enter.")));
+                scr.push(Line::from(yellow("Unknown choice — pick 1-6 or press Enter.")));
                 prompt_continue(&scr)?;
                 continue;
             }
@@ -974,13 +995,24 @@ pub fn render_dashboard(ctx: &AppContext) {
         f.render_widget(gauge, chunks[1]);
 
         // Lyrics + source
-        let lyr = vec![
+        let update_rows: Vec<Line<'static>> = {
+            let st = ctx.shared.update.lock().unwrap();
+            match &st.latest {
+                Some(version) => vec![info_row(
+                    "Update",
+                    &format!("v{version}: {}", st.message.lines().next().unwrap_or("")),
+                )],
+                None => vec![],
+            }
+        };
+        let mut lyr = vec![
             info_row("Lyrics", &lyrics),
             info_row(
                 "Source",
                 &format!("{} · {source}", settings.source.label()),
             ),
         ];
+        lyr.extend(update_rows);
         f.render_widget(Paragraph::new(lyr).wrap(Wrap { trim: true }), chunks[2]);
 
         // Footer
@@ -1012,6 +1044,9 @@ pub fn poll_shortcut(ctx: &AppContext) -> bool {
                         }
                         KeyCode::Char('b') if k.modifiers.contains(KeyModifiers::CONTROL) => {
                             crate::web::start(ctx);
+                        }
+                        KeyCode::Char('u') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                            crate::update::run_update(ctx, true);
                         }
                         _ => {}
                     }

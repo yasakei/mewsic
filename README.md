@@ -38,6 +38,11 @@ Mewsic runs as a single native binary:
   `http://127.0.0.1:8999`.
 - Detached background mode: `mewsic background` keeps playing after the
   terminal closes, stopped with `mewsic kill background`.
+- Automatic updates: checks GitHub releases on startup and every 6 hours,
+  verifies the download against the release checksums, and swaps the new
+  binary in place (restart mewsic to use it). Windows installs in elevated
+  directories fall back to a silent NSIS installer; `mewsic update` forces a
+  check, `mewsic update check` only reports.
 - `setup` wizard, interactive settings editor, autostart on login (launches a
   background daemon), and `stop` / `kill` commands via PID files. Autostart
   can be turned off with `mewsic kill autostart` or in the settings editor.
@@ -77,6 +82,8 @@ mewsic settings        # edit settings interactively
 mewsic stop            # stop the running foreground instance
 mewsic kill background # stop the background instance
 mewsic kill autostart  # disable autostart (start-on-login)
+mewsic update          # check for and install the latest release
+mewsic update check    # check for a newer release without installing
 mewsic version         # print version
 ```
 
@@ -97,6 +104,15 @@ Settings live in `settings.toml` under the config directory
 Windows — override with `$MEWSIC_CONFIG_DIR`). The setup wizard and settings
 editor write this file for you, so you usually never touch it by hand.
 
+Your Discord token is **not** stored in that file. It's kept in the OS
+credential manager (macOS Keychain, Windows Credential Manager, or Linux
+Secret Service/KWallet) via the `keyring` crate, and `settings.toml` is
+chmodded `0600` so the Last.fm API key stays private too. On systems without a
+keyring backend (e.g. a headless Linux box), the token falls back to a
+`0600`-permission `token` file in the same directory instead of plaintext in
+`settings.toml`. A token left in `settings.toml` by an older version is moved
+into the credential store automatically on startup.
+
 ## Architecture
 
 | Module            | Responsibility                                        |
@@ -109,6 +125,8 @@ editor write this file for you, so you usually never touch it by hand.
 | `sync.rs`         | Status text rendering (offset, template, crop)        |
 | `state.rs`        | Shared playback/tracker state, UI snapshot            |
 | `config.rs`       | TOML settings                                         |
+| `credential.rs`   | OS keyring storage for the Discord token              |
+| `update.rs`       | Auto-updater (release check, checksum verify, install)|
 | `tui.rs`          | Terminal dashboard, setup wizard, settings editor     |
 | `web.rs`          | Tiny std-only HTTP server for the web panel           |
 | `autostart.rs`    | Launch-on-login registration                          |

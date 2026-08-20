@@ -3,6 +3,7 @@
 mod autostart;
 mod config;
 mod connector;
+mod credential;
 mod engine;
 mod lastfm;
 mod log;
@@ -11,6 +12,7 @@ mod net;
 mod state;
 mod sync;
 mod tui;
+mod update;
 mod util;
 mod web;
 
@@ -35,6 +37,8 @@ USAGE:
   mewsic stop               Stop the running foreground instance
   mewsic kill background    Stop the background instance
   mewsic kill autostart     Disable autostart (start-on-login)
+  mewsic update             Check for and install the latest release
+  mewsic update check       Check for a newer release without installing
   mewsic version            Print version
 
 ENVIRONMENT:
@@ -63,6 +67,7 @@ fn main() {
         "web" => run(true),
         "run" => run(false),
         "background" => background(),
+        "update" => update_command(args.get(1).map(|s| s.as_str())),
         "kill" => kill(args.get(1).map(|s| s.as_str())),
         "_background" => background_child(),
         other => {
@@ -134,6 +139,7 @@ fn run(with_web: bool) {
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
+    update::spawn_checker(ctx.clone());
 
     if interactive {
         if with_web {
@@ -287,6 +293,7 @@ fn background_child() {
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
+    update::spawn_checker(ctx.clone());
     run_headless(&ctx, &engine, true);
     engine.shutdown();
     crate::log::write("background engine stopped");
@@ -400,6 +407,23 @@ fn settings() {
     tui::enable_raw();
     let _ = tui::run_settings_editor(&ctx);
     tui::disable_raw();
+}
+
+/// `mewsic update` / `mewsic update check` — check GitHub for a newer release
+/// and install it when one exists. Manual mode may fall back to the elevated
+/// Windows installer; the background checker never elevates on its own.
+fn update_command(sub: Option<&str>) {
+    let ctx = init_context();
+    let state = match sub {
+        Some("check") | Some("--check") => update::check_only(&ctx),
+        Some(other) => {
+            eprintln!("unknown update subcommand: {other}\n");
+            println!("{HELP}");
+            std::process::exit(2);
+        }
+        _ => update::run_update(&ctx, true),
+    };
+    println!("{}", state.message);
 }
 
 fn stop() {

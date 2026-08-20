@@ -139,6 +139,7 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
             let latency = engine::last_latency(ctx);
             let tracker = ctx.shared.tracker.lock().unwrap();
             let auto = tracker.avg_latency();
+            let update = ctx.shared.update.lock().unwrap().clone();
             let body = json!({
                 "song": pb.song_name,
                 "artist": pb.song_author,
@@ -150,18 +151,41 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
                 "source": source,
                 "latency": latency,
                 "autooffset": auto,
+                "update": {
+                    "latest": update.latest,
+                    "message": update.message,
+                },
             });
             json_response(body.to_string())
         }
 
         ("GET", "/api/settings") => {
             let settings = ctx.settings.read().unwrap();
-            json_response(serde_json::to_string(&*settings).unwrap_or_else(|_| "{}".into()))
+            let has_token = !settings.token.is_empty();
+            let mut value = serde_json::to_value(&*settings).unwrap_or_else(|_| json!({}));
+            // Never hand the stored token back to the page; expose whether one
+            // is configured instead.
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("token".into(), json!(""));
+                obj.insert("hasToken".into(), json!(has_token));
+            }
+            json_response(value.to_string())
         }
 
         ("POST", "/api/settings") => {
             match serde_json::from_slice::<Settings>(body) {
-                Ok(new_settings) => {
+                Ok(mut new_settings) => {
+                    // The panel doesn't receive the stored token back, so an
+                    // omitted `token` field must keep the existing one rather
+                    // than clearing it.
+                    if let Ok(raw) = serde_json::from_slice::<serde_json::Value>(body) {
+                        match raw.get("token") {
+                            Some(serde_json::Value::String(t)) => new_settings.token = t.clone(),
+                            _ => {
+                                new_settings.token = ctx.settings.read().unwrap().token.clone();
+                            }
+                        }
+                    }
                     {
                         let mut settings = ctx.settings.write().unwrap();
                         *settings = new_settings.clone();

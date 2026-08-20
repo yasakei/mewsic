@@ -66,12 +66,25 @@ impl Tracker {
     }
 }
 
+/// Result of the latest update check / install attempt, shown in the TUI and
+/// web panel. Written only by the update checker thread.
+#[derive(Debug, Clone, Default)]
+pub struct UpdateState {
+    /// Newest released version (tag without `v`) if the check found one.
+    pub latest: Option<String>,
+    /// Human-readable outcome of the last check ("up to date", "v1.0.3
+    /// installed — restart to apply", a staged path, or a check error).
+    pub message: String,
+}
+
 /// Everything the UI and web panel read, wrapped in cheap locks.
 pub struct Shared {
     pub playback: Mutex<Playback>,
     pub tracker: Mutex<Tracker>,
     /// Human-readable provenance of the current lyrics ("LrcLib", "cache", ...).
     pub lyric_source: Mutex<String>,
+    /// Feedback of the auto-updater (see [`UpdateState`]).
+    pub update: Mutex<UpdateState>,
 }
 
 impl Shared {
@@ -80,6 +93,7 @@ impl Shared {
             playback: Mutex::new(Playback::default()),
             tracker: Mutex::new(Tracker::default()),
             lyric_source: Mutex::new("not fetched".to_string()),
+            update: Mutex::new(UpdateState::default()),
         })
     }
 }
