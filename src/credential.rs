@@ -82,10 +82,18 @@ fn restrict_permissions(_path: &Path) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    /// Unique temp dir per test: cargo runs tests in parallel threads sharing
+    /// one process id, so a shared path would make the tests race over the
+    /// token file (one test's cleanup deleting the other's data mid-run).
+    fn test_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("mewsic-cred-{}-{label}", std::process::id()))
+    }
 
     #[test]
     fn fallback_store_roundtrip() {
-        let dir = std::env::temp_dir().join(format!("mewsic-cred-{}", std::process::id()));
+        let dir = test_dir("roundtrip");
         let _ = fs::create_dir_all(&dir);
         fallback_store(&dir, "super-secret").unwrap();
         assert_eq!(fallback_load(&dir).as_deref(), Some("super-secret"));
@@ -98,7 +106,7 @@ mod tests {
     #[cfg(unix)]
     fn fallback_file_is_private() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("mewsic-cred-{}", std::process::id()));
+        let dir = test_dir("private");
         let _ = fs::create_dir_all(&dir);
         fallback_store(&dir, "super-secret").unwrap();
         let mode = fs::metadata(dir.join("token")).unwrap().permissions().mode();
