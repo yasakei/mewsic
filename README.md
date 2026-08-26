@@ -1,4 +1,5 @@
 # Mewsic
+<img width="800" height="380" alt="image" src="https://cdn.yasakei.dev/image/upload/v1779784805/6878ec6702c50_cgr597.png" />
 
 Keep your Discord status in sync with the song you're playing — line by line.
 
