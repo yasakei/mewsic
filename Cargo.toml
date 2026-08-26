@@ -1,6 +1,6 @@
 [package]
 name = "mewsic"
-version = "1.0.3"
+version = "1.1.0"
 edition = "2021"
 description = "Mewsic — mirror the song you're playing into your Discord status, line by line."
 authors = ["Yasakei"]
