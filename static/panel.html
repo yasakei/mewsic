@@ -71,15 +71,129 @@
   html.dark #checkToken:hover { border-color: #a78bfa; color: #a78bfa; background: #1f1f23; }
   html.dark #checkToken.ok { border-color: #34d399; color: #34d399; }
   html.dark #checkToken.err { border-color: #f87171; color: #f87171; }
+
+  /* Mewsic visual system: candy-colored modern brutalism. */
+  :root {
+    --ink: #171717;
+    --paper: #f6f1e8;
+    --card: #fffdf8;
+    --line: #171717;
+    --acid: #d7ff45;
+    --pink: #ff86c8;
+    --blue: #78c8ff;
+    --orange: #ff9d4d;
+    --violet: #9b7bff;
+    --mint: #83e6c0;
+    --shadow: 7px 7px 0 var(--ink);
+  }
+  html.dark {
+    --ink: #171717;
+    --paper: #171717;
+    --card: #fffdf8;
+    --line: #171717;
+    --shadow: 7px 7px 0 #f8f3ea;
+  }
+  body { background: var(--paper) !important; color: var(--ink) !important; }
+  body > div:first-of-type {
+    max-width: 1180px !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 22px;
+    padding-top: 28px !important;
+    padding-bottom: 52px !important;
+  }
+  header {
+    grid-column: 1 / -1;
+    margin-bottom: 2px !important;
+    padding: 0 0 20px !important;
+    border-bottom: 3px solid var(--line) !important;
+  }
+  html.dark header { border-color: #f8f3ea !important; }
+  header > div:first-child {
+    height: 48px !important; width: 64px !important; border-radius: 0 !important;
+    padding: 9px 12px !important; background: var(--acid) !important; color: var(--ink) !important;
+    border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line);
+    font-family: var(--mono); font-size: 13px !important; letter-spacing: .12em;
+    justify-content: center;
+  }
+  .cat-mark { width: 42px; height: 36px; display: block; }
+  .cat-mark .face { fill: var(--acid); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+  .cat-mark .ear { fill: var(--pink); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+  .cat-mark .eye, .cat-mark .nose, .cat-mark .mouth { fill: var(--ink); }
+  .cat-mark .highlight { fill: var(--acid); }
+  .cat-mark .whisker { stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; }
+  header h1 { font-size: 28px !important; line-height: 1 !important; text-transform: uppercase; letter-spacing: -.04em !important; }
+  header p { color: var(--ink) !important; opacity: .68; font-family: var(--mono); font-size: 11px !important; }
+  html.dark header h1, html.dark header p { color: #f8f3ea !important; }
+  #live { border: 3px solid var(--line) !important; border-radius: 0 !important; color: var(--ink) !important; background: var(--pink); box-shadow: 4px 4px 0 var(--line); }
+  .dot { border-radius: 0 !important; background: var(--ink); }
+  .dot.on { background: #16855d; box-shadow: none; }
+  .dot.off { background: #d44545; }
+  #updBanner { grid-column: 1 / -1; margin: 0 !important; border: 3px solid var(--line) !important; border-radius: 0 !important; background: var(--orange) !important; color: var(--ink) !important; box-shadow: var(--shadow); }
+  section { margin: 0 !important; border: 3px solid var(--line) !important; border-radius: 0 !important; background: var(--card) !important; box-shadow: var(--shadow); }
+  section:nth-of-type(1) { grid-column: 1 / -1; background: var(--blue) !important; }
+  section:nth-of-type(2) { grid-column: 1; background: var(--card) !important; }
+  section:nth-of-type(3) { grid-column: 2; background: var(--mint) !important; }
+  section:nth-of-type(4) { grid-column: 1; background: var(--violet) !important; }
+  section:nth-of-type(5) { grid-column: 2; background: var(--orange) !important; }
+  section > h2 { color: var(--ink) !important; opacity: .72; letter-spacing: .2em !important; border-bottom: 2px solid var(--line); padding-bottom: 10px; }
+  section:nth-of-type(1) > h2 { opacity: 1; }
+  section:nth-of-type(1) #npTitle { font-size: 31px; line-height: 1.05; letter-spacing: -.04em; }
+  section:nth-of-type(1) #npArtist { color: var(--ink) !important; opacity: .72; }
+  section:nth-of-type(1) #npBar { background: var(--ink) !important; border-radius: 0 !important; }
+  section:nth-of-type(1) .h-1\.5 { background: rgba(23,23,23,.2) !important; border-radius: 0 !important; }
+  #npLine, #preview { border: 2px dashed var(--line) !important; border-radius: 0 !important; background: rgba(255,255,255,.35) !important; color: var(--ink) !important; }
+  section .text-zinc-400, section .text-zinc-500, section .text-zinc-600,
+  section .text-zinc-300, section .text-zinc-100,
+  label, section p, small, section span, section b { color: var(--ink) !important; }
+  section label, section p, section small { opacity: .92; line-height: 1.35; }
+  section label { font-weight: 650 !important; }
+  section > .divide-y > div > label, section > div > div > label { white-space: nowrap; }
+  section > .divide-y > div > small, section > p { display: block; width: calc(100% - 176px) !important; margin-left: 176px !important; padding-left: 0 !important; }
+  section b { opacity: 1; }
+  section input::placeholder, section textarea::placeholder { color: var(--ink) !important; opacity: .52; }
+  section > .divide-y > div > label, section > div > div > label { min-width: 164px; }
+  #lastfmRow label { min-width: 164px; }
+  #npTime, #npSource, #npPing, #npAuto { opacity: .8; }
+  input, select, textarea { border: 2px solid var(--line) !important; border-radius: 0 !important; background: var(--card) !important; color: var(--ink) !important; box-shadow: 3px 3px 0 var(--line); }
+  input:focus, select:focus, textarea:focus { border-color: var(--line) !important; box-shadow: 4px 4px 0 var(--line) !important; outline: 2px solid var(--acid) !important; }
+  #checkToken { height: 36px; border: 2px solid var(--line) !important; border-radius: 0 !important; background: var(--acid) !important; color: var(--ink) !important; box-shadow: 3px 3px 0 var(--line); }
+  #checkToken:hover { border-color: var(--line) !important; color: var(--ink) !important; background: var(--pink) !important; }
+  #checkToken.ok { background: var(--mint) !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  #checkToken.err { background: #ff6868 !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  .peer + div { border-radius: 0 !important; border: 2px solid var(--line); background: rgba(255,255,255,.45) !important; }
+  .peer:checked + div { background: #f04f9d !important; border-color: var(--line) !important; }
+  .peer + div::after { border-radius: 0 !important; background: #fffdf8 !important; box-shadow: none !important; }
+  .saved-flag { right: 24px; bottom: 24px; border: 3px solid var(--line); border-radius: 0; background: var(--acid); color: var(--ink); box-shadow: 5px 5px 0 var(--line); }
+  @media (max-width: 800px) {
+    body > div:first-of-type { display: block; padding: 18px !important; }
+    header { margin-bottom: 20px !important; }
+    section, #updBanner { margin-bottom: 20px !important; }
+    section > .divide-y > div > small, section > p { width: 100% !important; margin-left: 0 !important; }
+  }
+  @media (min-width: 801px) and (max-width: 1020px) {
+    body > div:first-of-type { grid-template-columns: 1fr; }
+    section:nth-of-type(n) { grid-column: 1; }
+  }
 </style>
 </head>
 <body class="min-h-screen bg-zinc-50 text-zinc-900 antialiased transition-colors dark:bg-zinc-950 dark:text-zinc-100">
 <div class="mx-auto max-w-2xl px-5 py-10 sm:px-6">
   <header class="mb-8 flex items-center gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-    <div class="flex h-10 shrink-0 items-center rounded-xl bg-violet-600 px-3 font-mono text-sm font-bold text-white shadow-sm">(=^･ω･^=)</div>
+    <div class="flex h-10 shrink-0 items-center rounded-xl bg-violet-600 px-3 font-mono text-sm font-bold text-white shadow-sm" aria-label="mewsic cat mascot">
+      <svg class="cat-mark" viewBox="0 0 48 40" role="img" aria-hidden="true">
+        <path class="face" d="M7 14 8 5l9 6c2-1 4-2 7-2s5 1 7 2l9-6 1 9v13c0 7-6 11-16 11S7 34 7 27Z"/>
+        <path class="ear" d="m10 9 6 4-5 2Z"/><path class="ear" d="m38 9-6 4 5 2Z"/>
+        <ellipse class="eye" cx="17" cy="22" rx="3" ry="3.5"/><ellipse class="eye" cx="31" cy="22" rx="3" ry="3.5"/>
+        <circle class="highlight" cx="18" cy="21" r=".9"/><circle class="highlight" cx="32" cy="21" r=".9"/>
+        <path class="nose" d="m22 27 2-1.5 2 1.5-2 2Z"/>
+        <path class="mouth" d="M24 29v2M24 31c-2 2-3 2-4 1M24 31c2 2 3 2 4 1" stroke="var(--ink)" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <path class="whisker" d="M15 27 3 24M15 30 3 30M33 27l12-3M33 30l12 0"/>
+      </svg>
+    </div>
     <div class="min-w-0">
       <h1 class="text-lg font-semibold tracking-tight">mewsic</h1>
-      <p class="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">keep your Discord status in sync with the song you're playing</p>
+      <p class="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">line-by-line status control deck</p>
     </div>
     <div class="flex-1"></div>
     <span id="live" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-zinc-200 px-3 py-1 font-mono text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
@@ -93,17 +207,17 @@
   <!-- Now playing -->
   <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
     <h2 class="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">now playing</h2>
-    <div class="text-base font-semibold" id="npTitle">—</div>
-    <div class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400" id="npArtist">—</div>
+    <div class="text-base font-semibold" id="npTitle">NO TRACK</div>
+    <div class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400" id="npArtist">NO ARTIST</div>
     <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
       <i id="npBar" class="block h-full w-0 rounded-full bg-violet-600 transition-[width] duration-300 ease-out"></i>
     </div>
     <div class="mt-1.5 font-mono text-[11px] text-zinc-400 dark:text-zinc-500" id="npTime">0:00 / 0:00</div>
-    <div class="mt-4 min-h-11 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3.5 py-3 font-mono text-[13px] dark:border-zinc-700 dark:bg-zinc-950/60" id="npLine">waiting…</div>
+    <div class="mt-4 min-h-11 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3.5 py-3 font-mono text-[13px] dark:border-zinc-700 dark:bg-zinc-950/60" id="npLine">WAITING FOR PLAYBACK</div>
     <div class="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-      <span>source <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npSource">—</b></span>
-      <span>ping <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npPing">—</b></span>
-      <span>autooffset <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npAuto">—</b></span>
+      <span>source <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npSource">NONE</b></span>
+      <span>ping <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npPing">NONE</b></span>
+      <span>autooffset <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npAuto">NONE</b></span>
     </div>
   </section>
 
@@ -275,7 +389,7 @@
   </section>
 </div>
 
-<div class="saved-flag" id="savedFlag">saved ✓</div>
+<div class="saved-flag" id="savedFlag">SAVED</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -378,7 +492,7 @@ function renderPreview() {
       .replace(/\{song_name\}/g, "Example Song")
       .replace(/\{song_author\}/g, "Example Artist")
       .replace(/\{timestamp\}/g, "2:17")
-      .replace(/♪/g, "🎶");
+      .replace(/♪/g, "[music]");
   }
   const emoji = v.view.advanced.enabled ? v.view.advanced.emoji : v.view.emoji;
   $("preview").textContent = (emoji ? emoji + " " : "") + text.slice(0, 128);
@@ -409,17 +523,17 @@ async function pollState() {
   try {
     const res = await fetch("/api/state");
     const s = await res.json();
-    $("npTitle").textContent = s.song || "—";
-    $("npArtist").textContent = s.artist || "—";
+    $("npTitle").textContent = s.song || "NO TRACK";
+    $("npArtist").textContent = s.artist || "NO ARTIST";
     const dur = s.duration || 0;
     const prog = s.progress || 0;
     const pct = dur ? Math.min(100, Math.round(prog / dur * 100)) : 0;
     $("npBar").style.width = pct + "%";
     $("npTime").textContent = fmtSeconds(Math.floor(prog / 1000)) + " / " + fmtSeconds(Math.floor(dur / 1000));
-    $("npLine").textContent = s.line || (s.hasLyrics ? "waiting for the next line…" : "no synced lyrics");
-    $("npSource").textContent = s.source || "—";
-    $("npPing").textContent = s.latency != null ? s.latency + " ms" : "—";
-    $("npAuto").textContent = s.autooffset != null ? s.autooffset + " ms" : "—";
+    $("npLine").textContent = s.line || (s.hasLyrics ? "WAITING FOR NEXT LINE" : "NO SYNCED LYRICS");
+    $("npSource").textContent = s.source || "NONE";
+    $("npPing").textContent = s.latency != null ? s.latency + " ms" : "NONE";
+    $("npAuto").textContent = s.autooffset != null ? s.autooffset + " ms" : "NONE";
     $("dot").className = "dot " + (s.playing ? "on" : (s.song ? "off" : ""));
     $("liveText").textContent = s.playing ? "playing" : (s.song ? "paused" : "idle");
     const upd = s.update;
@@ -449,7 +563,7 @@ async function checkToken() {
     });
     const data = await res.json();
     btn.className = data.ok ? "ok" : "err";
-    btn.textContent = data.ok ? "valid ✓" : "invalid ✗";
+    btn.textContent = data.ok ? "VALID" : "INVALID";
     setTimeout(() => { btn.className = ""; btn.textContent = "check"; btn.disabled = false; }, 2200);
   } catch (e) {
     btn.className = "err"; btn.textContent = "error";

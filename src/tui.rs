@@ -71,6 +71,10 @@ fn green(s: &str) -> Span<'static> {
     Span::styled(s.to_string(), Style::default().fg(Color::Green))
 }
 
+fn red(s: &str) -> Span<'static> {
+    Span::styled(s.to_string(), Style::default().fg(Color::Red))
+}
+
 fn yellow(s: &str) -> Span<'static> {
     Span::styled(s.to_string(), Style::default().fg(Color::Yellow))
 }
@@ -434,14 +438,22 @@ pub fn choose_startup_mode() -> StartupMode {
 }
 
 /// Screen shown when the user picks the web panel on first run.
-pub fn show_web_panel_hint() {
+pub fn show_web_panel_hint(panel_ready: bool) {
     let mut screen = Screen::new("Web panel");
     screen.blank();
-    screen.push(Line::from(green(&format!("Open {PANEL_URL} in your browser."))));
-    screen.blank();
-    screen.push(Line::from(dim(
-        "Finish setup there — the engine picks up the token automatically.",
-    )));
+    if panel_ready {
+        screen.push(Line::from(green(&format!("Open {PANEL_URL} in your browser."))));
+        screen.blank();
+        screen.push(Line::from(dim(
+            "Finish setup there — the engine picks up the token automatically.",
+        )));
+    } else {
+        screen.push(Line::from(red("The web panel could not be started.")));
+        screen.blank();
+        screen.push(Line::from(dim(
+            "Check the log, then run `mewsic web` to try again.",
+        )));
+    }
     let _ = prompt_continue(&screen);
 }
 

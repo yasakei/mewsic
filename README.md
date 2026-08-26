@@ -84,6 +84,7 @@ mewsic kill background # stop the background instance
 mewsic kill autostart  # disable autostart (start-on-login)
 mewsic update          # check for and install the latest release
 mewsic update check    # check for a newer release without installing
+mewsic uninstall       # disable autostart and remove the installed binary
 mewsic version         # print version
 ```
 

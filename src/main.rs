@@ -39,6 +39,7 @@ USAGE:
   mewsic kill autostart     Disable autostart (start-on-login)
   mewsic update             Check for and install the latest release
   mewsic update check       Check for a newer release without installing
+  mewsic uninstall          Disable autostart and remove the mewsic binary
   mewsic version            Print version
 
 ENVIRONMENT:
@@ -67,6 +68,7 @@ fn main() {
         "web" => run(true),
         "run" => run(false),
         "background" => background(),
+        "uninstall" => uninstall(),
         "update" => update_command(args.get(1).map(|s| s.as_str())),
         "kill" => kill(args.get(1).map(|s| s.as_str())),
         "_background" => background_child(),
@@ -132,7 +134,8 @@ fn run(with_web: bool) {
             }
             tui::StartupMode::Web => {
                 with_web = true;
-                tui::show_web_panel_hint();
+                let panel_ready = web::start(&ctx);
+                tui::show_web_panel_hint(panel_ready);
             }
         }
     }
@@ -355,6 +358,84 @@ fn kill_autostart() {
         println!(
             "A running instance (pid {pid}) keeps playing until stopped with `mewsic kill background` or `mewsic stop`."
         );
+    }
+}
+
+/// Disable startup integration, stop other instances and remove this binary.
+/// User settings are intentionally retained so reinstalling does not discard
+/// credentials or preferences.
+fn uninstall() {
+    let ctx = init_context();
+    {
+        let mut settings = ctx.settings.write().unwrap();
+        settings.update.auto_start = false;
+        let _ = settings.save(&ctx.config_dir);
+    }
+    crate::autostart::apply(false);
+    stop_all_instances();
+
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("could not locate the mewsic executable: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match remove_current_executable(&exe) {
+        Ok(()) => {
+            println!("Removed mewsic from {}.", exe.display());
+            println!("Settings were kept at {}.", config::config_dir().display());
+        }
+        Err(e) => {
+            eprintln!("could not remove {}: {e}", exe.display());
+            #[cfg(unix)]
+            eprintln!("Try running `sudo mewsic uninstall` if it was installed system-wide.");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn stop_all_instances() {
+    for name in ["mewsic.pid", "background.pid"] {
+        let pid_file = config::config_dir().join(name);
+        let pid = std::fs::read_to_string(&pid_file)
+            .ok()
+            .and_then(|raw| raw.trim().parse::<u32>().ok());
+        if let Some(pid) = pid {
+            if pid != std::process::id() && process_alive(pid) {
+                let _ = send_terminate(pid);
+            }
+        }
+        let _ = std::fs::remove_file(pid_file);
+    }
+}
+
+#[cfg(unix)]
+fn remove_current_executable(exe: &std::path::Path) -> std::io::Result<()> {
+    std::fs::remove_file(exe)
+}
+
+#[cfg(windows)]
+fn remove_current_executable(exe: &std::path::Path) -> std::io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    let pending = exe.with_extension("uninstalling.exe");
+    std::fs::rename(exe, &pending)?;
+    let script = "Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath $args[0] -Force";
+    let spawned = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script, "--"])
+        .arg(&pending)
+        .creation_flags(DETACHED_SPAWN_FLAGS)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    match spawned {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let _ = std::fs::rename(&pending, exe);
+            Err(e)
+        }
     }
 }
 
