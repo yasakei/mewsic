@@ -3,10 +3,10 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use serde_json::json;
 
@@ -23,25 +23,35 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 const PANEL_HTML: &str = include_str!("../static/panel.html");
 
 /// Start the panel server on a background thread (idempotent).
-pub fn start(ctx: &AppContext) {
+/// The socket is bound before returning so first-run setup can safely show the URL.
+pub fn start(ctx: &AppContext) -> bool {
     if RUNNING.swap(true, Ordering::SeqCst) {
-        return;
+        return true;
     }
+    let listener = match TcpListener::bind(("127.0.0.1", PANEL_PORT)) {
+        Ok(listener) => listener,
+        Err(e) => {
+            RUNNING.store(false, Ordering::SeqCst);
+            crate::log::write(&format!("panel server error: {e}"));
+            eprintln!("could not start web panel at {PANEL_URL}: {e}");
+            return false;
+        }
+    };
     let ctx = AppContext::new(
         ctx.shared.clone(),
         ctx.settings.clone(),
         ctx.config_dir.clone(),
     );
     thread::spawn(move || {
-        if let Err(e) = serve(Arc::new(ctx)) {
+        if let Err(e) = serve(listener, Arc::new(ctx)) {
             crate::log::write(&format!("panel server error: {e}"));
             RUNNING.store(false, Ordering::SeqCst);
         }
     });
+    true
 }
 
-fn serve(ctx: Arc<AppContext>) -> std::io::Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", PANEL_PORT))?;
+fn serve(listener: TcpListener, ctx: Arc<AppContext>) -> std::io::Result<()> {
     crate::log::write(&format!("web panel listening on {PANEL_URL}"));
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
