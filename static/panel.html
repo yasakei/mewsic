@@ -520,7 +520,8 @@ async function pollState() {
     const pct = dur ? Math.min(100, Math.round(prog / dur * 100)) : 0;
     $("npBar").style.width = pct + "%";
     $("npTime").textContent = fmtSeconds(Math.floor(prog / 1000)) + " / " + fmtSeconds(Math.floor(dur / 1000));
-    $("npLine").textContent = s.line || (s.hasLyrics ? "WAITING FOR NEXT LINE" : "NO SYNCED LYRICS");
+    const line = typeof s.line === "string" ? s.line : (s.line && s.line.text);
+    $("npLine").textContent = line || (s.hasLyrics ? "WAITING FOR NEXT LINE" : "NO SYNCED LYRICS");
     $("npSource").textContent = s.source || "NONE";
     $("npPing").textContent = s.latency != null ? s.latency + " ms" : "NONE";
     $("npAuto").textContent = s.autooffset != null ? s.autooffset + " ms" : "NONE";
@@ -561,10 +562,14 @@ async function checkToken() {
   }
 }
 
-["timestamp","label","autoClear","advanced","autoOffset","autoStart","autoCheck"].forEach(id =>
-  $(id).addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); }));
-["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser"].forEach(id =>
-  $(id).addEventListener("input", () => { queueSave(); renderPreview(); }));
+["timestamp","label","autoClear","advanced","autoOffset","autoStart"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); });
+});
+["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("input", () => { queueSave(); renderPreview(); });
+});
 $("source").addEventListener("change", () => { updateSourceVisibility(); queueSave(); });
 $("advTemplate").addEventListener("input", () => { queueSave(); renderPreview(); });
 $("checkToken").addEventListener("click", checkToken);

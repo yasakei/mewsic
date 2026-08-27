@@ -1075,9 +1075,7 @@ fn apply_remote_state(ctx: &AppContext, state: &serde_json::Value) {
         .get("hasLyrics")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    playback.current_line = serde_json::from_value(state.get("line").cloned().unwrap_or_default())
-        .ok()
-        .filter(|line: &crate::state::LyricsLine| !line.text.is_empty());
+    playback.current_line = remote_lyric_line(state.get("line"), playback.song_progress);
     drop(playback);
 
     if let Some(source) = state.get("source").and_then(|v| v.as_str()) {
@@ -1095,6 +1093,19 @@ fn apply_remote_state(ctx: &AppContext, state: &serde_json::Value) {
             .unwrap_or_default()
             .to_string();
     }
+}
+
+fn remote_lyric_line(value: Option<&serde_json::Value>, progress: u64) -> Option<crate::state::LyricsLine> {
+    let value = value?;
+    if let Some(text) = value.as_str() {
+        return (!text.is_empty()).then(|| crate::state::LyricsLine {
+            time: progress,
+            text: text.to_string(),
+        });
+    }
+    serde_json::from_value(value.clone())
+        .ok()
+        .filter(|line: &crate::state::LyricsLine| !line.text.is_empty())
 }
 
 fn poll_remote_shortcut(ctx: &AppContext) -> bool {
@@ -1183,7 +1194,7 @@ mod tests {
             "playing": true,
             "progress": 12_000,
             "duration": 180_000,
-            "line": {"time": 11_500, "text": "hello"},
+            "line": "hello",
             "hasLyrics": true,
             "source": "cache",
             "latency": 42,
@@ -1201,5 +1212,11 @@ mod tests {
         assert_eq!(*ctx.shared.lyric_source.lock().unwrap(), "cache");
         assert_eq!(ctx.shared.tracker.lock().unwrap().last_latency, 42);
         assert_eq!(ctx.shared.update.lock().unwrap().latest.as_deref(), Some("1.2.0"));
+    }
+
+    #[test]
+    fn remote_state_accepts_legacy_structured_lyric_line() {
+        let line = serde_json::json!({"time": 11_500, "text": "hello"});
+        assert_eq!(remote_lyric_line(Some(&line), 12_000).unwrap().text, "hello");
     }
 }
