@@ -1,10 +1,9 @@
 //! Auto-updater.
 //!
-//! Checks the GitHub releases of the CI-built artifacts for a newer build of
-//! this platform, downloads it, verifies it against the release's
-//! `checksums.txt`, and replaces the running binary in place. The check runs
-//! in the background when `update.auto_check` is on, or on demand via
-//! `mewsic update` / `mewsic update check`.
+//! Checks the Mewsic update API for a newer CI-built release for this
+//! platform, downloads it, verifies it against the release's
+//! `checksums.txt`, and replaces the running binary in place. Checks happen on
+//! interactive launch or via `mewsic update` / `mewsic update check`.
 //!
 //! Replacing the executable is safe while running: on Unix the old inode keeps
 //! executing until the process exits; on Windows renaming an open executable
@@ -13,8 +12,6 @@
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -23,14 +20,12 @@ use sha2::{Digest, Sha256};
 use crate::state::{AppContext, UpdateState};
 
 const USER_AGENT: &str = "mewsic-updater";
-const LATEST_API: &str = "https://api.github.com/repos/yasakei/mewsic/releases/latest";
+const LATEST_API: &str = "https://api.update.mewsic.yasakei.dev/latest";
 /// Asset name of the sha256 manifest uploaded with every release.
 const CHECKSUM_ASSET: &str = "checksums.txt";
 /// Windows-only fallback: the NSIS installer rebuilt with each release.
 #[cfg_attr(not(windows), allow(dead_code))]
 const WINDOWS_INSTALLER_ASSET: &str = "mewsic-setup.exe";
-/// How often the background checker re-queries GitHub.
-const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// Name of the artifact GitHub publishes for this platform, or `None` when the
 /// current platform isn't released.
@@ -45,9 +40,16 @@ pub fn asset_name() -> Option<&'static str> {
     }
 }
 
-/// A GitHub release as served by `/releases/latest`.
+/// Response returned by the Mewsic update API's `/latest` endpoint.
+#[derive(Debug, Clone, Deserialize)]
+struct LatestResponse {
+    release: Release,
+}
+
+/// A release returned by the Mewsic update API.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Release {
+    #[serde(alias = "tag")]
     pub tag_name: String,
     pub assets: Vec<Asset>,
 }
@@ -55,11 +57,12 @@ pub struct Release {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Asset {
     pub name: String,
+    #[serde(alias = "url")]
     pub browser_download_url: String,
 }
 
 impl Release {
-    /// Tag without the leading `v` ("v1.0.3" -> "1.0.3").
+    /// Version without the leading `v`, if one is supplied.
     fn version(&self) -> &str {
         self.tag_name.trim_start_matches('v')
     }
@@ -119,11 +122,11 @@ fn get(url: &str) -> Result<ureq::Response, String> {
 pub fn latest_release() -> Result<Option<Release>, String> {
     let resp = get(LATEST_API)?;
     match resp.status() {
-        200 => serde_json::from_reader(resp.into_reader())
-            .map(Some)
+        200 => serde_json::from_reader::<_, LatestResponse>(resp.into_reader())
+            .map(|payload| Some(payload.release))
             .map_err(|e| format!("bad release payload: {e}")),
         404 => Ok(None),
-        s => Err(format!("github api returned HTTP {s}")),
+        s => Err(format!("update api returned HTTP {s}")),
     }
 }
 
@@ -250,7 +253,7 @@ fn fallback_install(
     #[cfg(windows)]
     {
         if !manual {
-            // Never pop a UAC prompt from a background check.
+            // Only explicit/manual updates may show a UAC prompt.
             return Ok(ApplyOutcome::Staged(staged.to_path_buf()));
         }
         let checksums = match release.asset(CHECKSUM_ASSET) {
@@ -278,13 +281,33 @@ fn fallback_install(
     }
     #[cfg(not(windows))]
     {
-        let _ = (ctx, release, manual);
-        Ok(ApplyOutcome::Staged(staged.to_path_buf()))
+        let _ = (ctx, release);
+        if !manual {
+            return Ok(ApplyOutcome::Staged(staged.to_path_buf()));
+        }
+        let exe = current_exe()?;
+        let status = std::process::Command::new("sudo")
+            .arg(&exe)
+            .arg("_apply-update")
+            .arg(staged)
+            .status()
+            .map_err(|e| format!("could not start the administrator prompt: {e}"))?;
+        if status.success() {
+            Ok(ApplyOutcome::Replaced)
+        } else {
+            Err("administrator authorization was not granted".to_string())
+        }
     }
 }
 
-/// Check GitHub for a newer release and install it when one exists. `manual`
-/// is set for `mewsic update` (allows elevating via the Windows installer).
+/// Internal elevated entry point. The target is always this executable, so a
+/// caller cannot use the helper to overwrite an arbitrary path.
+pub fn apply_staged_as_admin(staged: &Path) -> Result<(), String> {
+    install_in_place(&current_exe()?, staged)
+}
+
+/// Check the update API for a newer release and install it when one exists.
+/// `manual` is set for `mewsic update` (allows elevating via the Windows installer).
 pub fn run_update(ctx: &AppContext, manual: bool) -> UpdateState {
     let current = env!("CARGO_PKG_VERSION");
     let Some(asset) = asset_name() else {
@@ -341,8 +364,7 @@ pub fn run_update(ctx: &AppContext, manual: bool) -> UpdateState {
                         );
                         #[cfg(not(windows))]
                         let message = format!(
-                            "v{version} downloaded to {}. Install it with:\n  sudo install -m 755 {} {}",
-                            path.display(),
+                            "v{version} downloaded to {}, but administrator authorization is required to replace {}",
                             path.display(),
                             exe
                         );
@@ -418,24 +440,6 @@ fn current_exe() -> Result<PathBuf, String> {
     std::env::current_exe().map_err(|e| format!("cannot locate the executable: {e}"))
 }
 
-/// Run the updater in a detached thread: one check right after startup, then
-/// every [`CHECK_INTERVAL`] while `update.auto_check` stays enabled. The loop
-/// is killed when the process exits.
-pub fn spawn_checker(ctx: Arc<AppContext>) {
-    thread::spawn(move || {
-        // A short stagger so startup (settings load, token fetch) settles
-        // before we touch the network — but the check still runs moments
-        // after mewsic opens.
-        thread::sleep(Duration::from_secs(2));
-        loop {
-            if ctx.settings.read().unwrap().update.auto_check {
-                run_update(&ctx, false);
-            }
-            thread::sleep(CHECK_INTERVAL);
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,6 +490,32 @@ mod tests {
         assert_eq!(
             expected_sha256(manifest, "mewsic-aarch64-unknown-linux-gnu"),
             None
+        );
+    }
+
+    #[test]
+    fn latest_api_payload_maps_to_existing_release_model() {
+        let payload: LatestResponse = serde_json::from_str(
+            r#"{
+                "repository": "yasakei/mewsic",
+                "release": {
+                    "tag": "v1.1.0",
+                    "version": "1.1.0",
+                    "assets": [{
+                        "name": "checksums.txt",
+                        "url": "https://example.com/checksums.txt"
+                    }]
+                },
+                "fetched_at": "2026-08-27T05:30:49.845Z"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(payload.release.version(), "1.1.0");
+        assert_eq!(payload.release.assets[0].name, "checksums.txt");
+        assert_eq!(
+            payload.release.assets[0].browser_download_url,
+            "https://example.com/checksums.txt"
         );
     }
 

@@ -590,8 +590,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
 
     settings.update.auto_start =
         prompt_confirm(&maint, "Enable auto-start on login?", settings.update.auto_start)?;
-    settings.update.auto_check =
-        prompt_confirm(&maint, "Auto-check for updates?", settings.update.auto_check)?;
 
     {
         *ctx.settings.write().unwrap() = settings.clone();
@@ -693,11 +691,6 @@ fn summary_screen(settings: &crate::config::Settings) -> Screen {
         if settings.update.auto_start { "on" } else { "off" },
         settings.update.auto_start,
     ));
-    s.push(kv(
-        "Auto update",
-        if settings.update.auto_check { "on" } else { "off" },
-        settings.update.auto_check,
-    ));
     s
 }
 
@@ -757,10 +750,6 @@ pub fn summary(settings: &crate::config::Settings) -> String {
         "  Auto start: {}\n",
         if settings.update.auto_start { "on" } else { "off" }
     ));
-    out.push_str(&format!(
-        "  Auto update:{}\n",
-        if settings.update.auto_check { "on" } else { "off" }
-    ));
     out
 }
 
@@ -787,7 +776,7 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
         menu.push(Line::from(vec![cyan_bold("3"), Span::raw("  View (timestamp, label, advanced)")]));
         menu.push(Line::from(vec![cyan_bold("4"), Span::raw("  Timing (offset, autooffset)")]));
         menu.push(Line::from(vec![cyan_bold("5"), Span::raw("  Autostart")]));
-        menu.push(Line::from(vec![cyan_bold("6"), Span::raw("  Update (auto-check, check now)")]));
+        menu.push(Line::from(vec![cyan_bold("6"), Span::raw("  Update (manual check)")]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
@@ -901,11 +890,10 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
             "6" | "update" => {
                 let mut scr = Screen::new("Update");
                 scr.push(Line::from(dim(
-                    "Auto-updates check GitHub releases in the background and install the new binary.",
+                    "Updates are checked when you launch mewsic or run `mewsic update`.",
                 )));
                 scr.blank();
-                settings.update.auto_check =
-                    prompt_confirm(&scr, "Auto-check for updates?", settings.update.auto_check)?;
+                prompt_continue(&scr)?;
             }
             _ => {
                 let mut scr = Screen::new("Settings editor");
@@ -1037,6 +1025,111 @@ pub fn render_dashboard(ctx: &AppContext) {
     });
 }
 
+/// Attach a terminal dashboard to an already-running background daemon.
+/// The daemon remains the sole owner of playback and Discord state; this TUI
+/// mirrors its localhost web API state into the normal dashboard renderer.
+pub fn run_remote_dashboard(ctx: &AppContext, _pid: u32) {
+    enable_raw();
+    let mut last_render = Instant::now() - Duration::from_secs(1);
+    loop {
+        if poll_remote_shortcut(ctx) {
+            break;
+        }
+        if let Ok(response) = crate::net::agent()
+            .get("http://127.0.0.1:8999/api/state")
+            .timeout(Duration::from_secs(1))
+            .call()
+        {
+            if response.status() == 200 {
+                if let Ok(state) = response.into_json::<serde_json::Value>() {
+                    apply_remote_state(ctx, &state);
+                }
+            }
+        }
+        let now = Instant::now();
+        if now.duration_since(last_render) >= Duration::from_millis(250) {
+            last_render = now;
+            render_dashboard(ctx);
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    disable_raw();
+}
+
+fn apply_remote_state(ctx: &AppContext, state: &serde_json::Value) {
+    let mut playback = ctx.shared.playback.lock().unwrap();
+    playback.song_name = state
+        .get("song")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    playback.song_author = state
+        .get("artist")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    playback.is_playing = state.get("playing").and_then(|v| v.as_bool()).unwrap_or(false);
+    playback.song_progress = state.get("progress").and_then(|v| v.as_u64()).unwrap_or(0);
+    playback.song_duration = state.get("duration").and_then(|v| v.as_u64()).unwrap_or(0);
+    playback.has_lyrics = state
+        .get("hasLyrics")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    playback.current_line = serde_json::from_value(state.get("line").cloned().unwrap_or_default())
+        .ok()
+        .filter(|line: &crate::state::LyricsLine| !line.text.is_empty());
+    drop(playback);
+
+    if let Some(source) = state.get("source").and_then(|v| v.as_str()) {
+        *ctx.shared.lyric_source.lock().unwrap() = source.to_string();
+    }
+    if let Some(latency) = state.get("latency").and_then(|v| v.as_u64()) {
+        ctx.shared.tracker.lock().unwrap().last_latency = latency;
+    }
+    if let Some(update) = state.get("update") {
+        let mut current = ctx.shared.update.lock().unwrap();
+        current.latest = update.get("latest").and_then(|v| v.as_str()).map(str::to_string);
+        current.message = update
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+    }
+}
+
+fn poll_remote_shortcut(ctx: &AppContext) -> bool {
+    match event::poll(Duration::from_millis(1)) {
+        Ok(true) => match event::read() {
+            Ok(Event::Key(k)) if k.kind == crossterm::event::KeyEventKind::Press => {
+                if is_ctrl_c(&k) {
+                    return true;
+                }
+                if k.code == KeyCode::Char('s')
+                    && k.modifiers.contains(KeyModifiers::CONTROL)
+                    && run_settings_editor(ctx).is_some()
+                {
+                    push_remote_settings(ctx);
+                }
+                false
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+fn push_remote_settings(ctx: &AppContext) {
+    let settings = ctx.settings.read().unwrap().clone();
+    let Ok(body) = serde_json::to_string(&settings) else {
+        return;
+    };
+    let _ = crate::net::agent()
+        .post("http://127.0.0.1:8999/api/settings")
+        .timeout(Duration::from_secs(2))
+        .set("Content-Type", "application/json")
+        .send_string(&body);
+}
+
 /// Non-blocking poll for dashboard shortcuts. Returns `true` if quit.
 pub fn poll_shortcut(ctx: &AppContext) -> bool {
     let deadline = Instant::now() + Duration::from_millis(1);
@@ -1057,9 +1150,6 @@ pub fn poll_shortcut(ctx: &AppContext) -> bool {
                         KeyCode::Char('b') if k.modifiers.contains(KeyModifiers::CONTROL) => {
                             crate::web::start(ctx);
                         }
-                        KeyCode::Char('u') if k.modifiers.contains(KeyModifiers::CONTROL) => {
-                            crate::update::run_update(ctx, true);
-                        }
                         _ => {}
                     }
                 }
@@ -1070,5 +1160,46 @@ pub fn poll_shortcut(ctx: &AppContext) -> bool {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Settings;
+    use crate::state::Shared;
+    use std::sync::{Arc, RwLock};
+
+    #[test]
+    fn remote_state_populates_dashboard_context() {
+        let ctx = AppContext::new(
+            Shared::new(),
+            Arc::new(RwLock::new(Settings::default())),
+            std::env::temp_dir(),
+        );
+        let state = serde_json::json!({
+            "song": "Song",
+            "artist": "Artist",
+            "playing": true,
+            "progress": 12_000,
+            "duration": 180_000,
+            "line": {"time": 11_500, "text": "hello"},
+            "hasLyrics": true,
+            "source": "cache",
+            "latency": 42,
+            "update": {"latest": "1.2.0", "message": "available"}
+        });
+
+        apply_remote_state(&ctx, &state);
+
+        let playback = ctx.shared.playback.lock().unwrap().clone();
+        assert_eq!(playback.song_name, "Song");
+        assert_eq!(playback.song_author, "Artist");
+        assert!(playback.is_playing);
+        assert_eq!(playback.song_progress, 12_000);
+        assert_eq!(playback.current_line.unwrap().text, "hello");
+        assert_eq!(*ctx.shared.lyric_source.lock().unwrap(), "cache");
+        assert_eq!(ctx.shared.tracker.lock().unwrap().last_latency, 42);
+        assert_eq!(ctx.shared.update.lock().unwrap().latest.as_deref(), Some("1.2.0"));
     }
 }

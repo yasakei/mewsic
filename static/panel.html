@@ -375,16 +375,7 @@
         </div>
         <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Installs a platform autostart entry (Linux/macOS/Windows).</small>
       </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoCheck">Auto-check for updates</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="autoCheck" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Checks GitHub for new releases in the background and installs the new binary.</small>
-      </div>
+      <small class="block py-3.5 text-[11px] text-zinc-400 dark:text-zinc-500">Updates are checked when you launch mewsic or run <code>mewsic update</code> in a terminal.</small>
     </div>
   </section>
 </div>
@@ -418,7 +409,6 @@ function bindSettings() {
   setCheck("autoOffset", settings.timing.enable_autooffset);
   setVal("samples", settings.timing.autooffset);
   setCheck("autoStart", settings.update.auto_start);
-  setCheck("autoCheck", settings.update.auto_check);
   $("token").value = "";
   $("token").placeholder = settings.hasToken
     ? "saved in your OS keychain — paste a new token to replace"
@@ -454,7 +444,7 @@ function collectSettings() {
       enable_autooffset: $("autoOffset").checked,
       autooffset: Math.max(1, +$("samples").value || 3)
     },
-    update: { auto_start: $("autoStart").checked, auto_check: $("autoCheck").checked }
+    update: { auto_start: $("autoStart").checked }
   };
   // Only send the token when the user typed one; omitting it keeps the
   // existing stored token (it's never echoed back from the server).
