@@ -225,3 +225,14 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
         _ => not_found(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_script_does_not_bind_removed_auto_check_control() {
+        assert!(!PANEL_HTML.contains("autoCheck"));
+        assert!(PANEL_HTML.contains("pollState();"));
+    }
+}
