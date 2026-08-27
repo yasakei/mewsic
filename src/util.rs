@@ -1,15 +1,11 @@
-//! Small, dependency-light helpers.
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Format seconds as `m:ss`.
 pub fn format_seconds(total_secs: u64) -> String {
     let m = total_secs / 60;
     let s = total_secs % 60;
     format!("{m}:{s:02}")
 }
 
-/// Percent-encode a string for use in a URL query value.
 pub fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
@@ -23,7 +19,6 @@ pub fn urlencode(s: &str) -> String {
     out
 }
 
-/// Replace characters that are unsafe in file names with `_`.
 pub fn sanitize_filename(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -36,21 +31,16 @@ pub fn sanitize_filename(s: &str) -> String {
     out
 }
 
-/// Strip characters that `letters_only` mode removes: quotes, commas, dots.
 pub fn letters_only(s: &str) -> String {
     s.chars()
         .filter(|c| !matches!(c, '\'' | '"' | ',' | '.'))
         .collect()
 }
 
-/// Crop a string to at most `n` characters (unicode-safe).
 pub fn crop(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
-/// The Howard Hinnant `civil_from_days` algorithm — converts a days-since-epoch
-/// value into a (year, month, day) tuple. Implemented from the published
-/// description, not copied from any project source.
 fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -65,7 +55,6 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (year, m as u32, d as u32)
 }
 
-/// Current UTC time as an RFC 3339 timestamp, shifted by `offset_secs`.
 pub fn iso_now_plus(offset_secs: i64) -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -81,7 +70,6 @@ pub fn iso_now_plus(offset_secs: i64) -> String {
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
 }
 
-/// Decode HTML entities (numeric + a few common named ones).
 pub fn decode_html_entities(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let chars: Vec<char> = s.chars().collect();
@@ -150,8 +138,6 @@ mod tests {
 
     #[test]
     fn civil_date() {
-        // Verified against known anchors: 2023-01-01 = 19358,
-        // 2024-01-01 = 19723, 2025-01-01 = 20089, 2026-01-01 = 20454.
         assert_eq!(civil_from_days(19_358), (2023, 1, 1));
         assert_eq!(civil_from_days(19_723), (2024, 1, 1));
         assert_eq!(civil_from_days(20_089), (2025, 1, 1));

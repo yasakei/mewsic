@@ -1,16 +1,7 @@
-//! Configuration loading, saving and migration.
-//!
-//! Mewsic stores settings as TOML at `~/.config/mewsic/settings.toml`. The
-//! Discord token is *not* written there — it lives in the OS credential
-//! manager (see `crate::credential`), so the file holds no secrets. On first
-//! launch it can migrate a legacy `settings.json` (from the old Node app) so
-//! existing tokens keep working.
-
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Platform-aware config directory (`$MEWSIC_CONFIG_DIR` overrides everything).
 pub fn config_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("MEWSIC_CONFIG_DIR") {
         return PathBuf::from(dir);
@@ -33,17 +24,11 @@ pub fn config_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-/// Which playback source the engine polls.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Source {
-    /// Spotify, via the OAuth token Discord holds (the original backend).
     #[default]
     Spotify,
-    /// Last.fm, via its public scrobble API (api key + username). Covers
-    /// YouTube Music and any other web player once scrobbled — e.g. with the
-    /// WebScrobbler extension or the YT Music desktop app's built-in
-    /// Last.fm integration.
     Lastfm,
 }
 
@@ -55,7 +40,6 @@ impl Source {
         }
     }
 
-    /// Parse a user-typed choice (case-insensitive) back into a source.
     pub fn parse(input: &str) -> Option<Source> {
         match input.trim().to_ascii_lowercase().as_str() {
             "spotify" | "sp" | "discord" | "dc" => Some(Source::Spotify),
@@ -68,11 +52,8 @@ impl Source {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Discord user token — the only credential. Kept in the OS credential
-    /// manager rather than `settings.toml`; `save` moves it there.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub token: String,
-    /// Playback backend: Spotify, Last.fm or local MPRIS players.
     pub source: Source,
     pub lastfm: LastFmSettings,
     pub view: ViewSettings,
@@ -83,22 +64,16 @@ pub struct Settings {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LastFmSettings {
-    /// Last.fm API key (https://www.last.fm/api/account/create).
     pub api_key: String,
-    /// Last.fm username whose scrobbles to follow.
     pub username: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ViewSettings {
-    /// Prepend `[m:ss]` to the status text.
     pub timestamp: bool,
-    /// Prepend `Song lyrics -` to the status text.
     pub label: bool,
-    /// Optional emoji shown next to the status. Empty = none.
     pub emoji: String,
-    /// Clear the status immediately when the song changes.
     pub auto_clear: bool,
     pub advanced: AdvancedSettings,
 }
@@ -118,7 +93,6 @@ impl Default for ViewSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AdvancedSettings {
-    /// When true, `template` replaces the simple format.
     pub enabled: bool,
     pub emoji: String,
     pub template: String,
@@ -137,11 +111,8 @@ impl Default for AdvancedSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TimingSettings {
-    /// Fixed ms to send the status ahead of the lyric timestamp.
     pub send_time_offset: u64,
-    /// When true the offset is derived from Discord API latency.
     pub enable_autooffset: bool,
-    /// Number of latency samples used for the autooffset average.
     pub autooffset: usize,
 }
 
@@ -158,19 +129,11 @@ impl Default for TimingSettings {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
-    /// Launch on login.
     pub auto_start: bool,
-    /// Legacy setting kept so older configuration files still deserialize.
-    /// Update checks are now initiated only by interactive/manual commands.
     pub auto_check: bool,
 }
 
 impl Settings {
-    /// Load settings from `dir/settings.toml`, falling back to defaults and
-    /// attempting a migration from a legacy `settings.json` in the same dir.
-    /// The Discord token is pulled from the credential store; a token left in
-    /// the plaintext file by an older version is kept until the next `save`
-    /// moves it out.
     pub fn load(dir: &Path) -> Settings {
         let path = dir.join("settings.toml");
         let mut settings = if let Ok(raw) = fs::read_to_string(&path) {
@@ -185,23 +148,16 @@ impl Settings {
 
         if let Some(stored) = crate::credential::load_token(dir) {
             settings.token = stored;
-        } else if !settings.token.is_empty() {
-            // A legacy token left in plaintext settings.toml by an older
-            // version: move it into the credential store and strip the file
-            // copy right away so it isn't left exposed.
-            if crate::credential::store_token(dir, &settings.token).is_ok() {
-                let mut stripped = settings.clone();
-                stripped.token = String::new();
-                let _ = Self::write_toml(dir, &stripped);
-            }
+        } else if !settings.token.is_empty()
+            && crate::credential::store_token(dir, &settings.token).is_ok()
+        {
+            let mut stripped = settings.clone();
+            stripped.token = String::new();
+            let _ = Self::write_toml(dir, &stripped);
         }
         settings
     }
 
-    /// Persist settings to `dir/settings.toml`, creating the directory if
-    /// needed. The token is written to the credential store instead of the
-    /// file; `settings.toml` itself is chmodded 0600 so the Last.fm key stays
-    /// private too.
     pub fn save(&self, dir: &Path) -> Result<(), String> {
         let _ = fs::create_dir_all(dir);
         let mut file_settings = self.clone();
@@ -244,12 +200,9 @@ fn restrict_permissions(path: &Path) {
 #[cfg(not(unix))]
 fn restrict_permissions(_path: &Path) {}
 
-/// Import a legacy `settings.json` (the old Node app format) if present.
-/// Checks the config dir first, then the current working directory.
 fn migrate_legacy(dir: &Path) -> Option<Settings> {
     for path in [dir.join("settings.json"), PathBuf::from("settings.json")] {
         if let Some(settings) = read_legacy_json(&path) {
-            // Only keep a migrated settings.json once we've consumed it.
             if path.is_file() {
                 let _ = fs::remove_file(&path);
             }
@@ -259,7 +212,6 @@ fn migrate_legacy(dir: &Path) -> Option<Settings> {
     None
 }
 
-/// Parse one legacy `settings.json` file, or `None` if it's absent/invalid.
 fn read_legacy_json(path: &Path) -> Option<Settings> {
     let raw = fs::read_to_string(path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
@@ -327,8 +279,6 @@ fn read_legacy_json(path: &Path) -> Option<Settings> {
 mod tests {
     use super::*;
 
-    // Tests that override the keyring entry env vars touch process-global
-    // state, so they must not interleave with each other.
     static KEYRING_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
@@ -365,7 +315,6 @@ mod tests {
 
     #[test]
     fn legacy_settings_have_no_source() {
-        // A settings.json without a `source` must migrate to the default.
         let _guard = KEYRING_ENV_LOCK.lock().unwrap();
         std::env::set_var("MEWSIC_KEYRING_SERVICE", "mewsic-legacy-test");
         std::env::set_var("MEWSIC_KEYRING_USER", "legacy-user");

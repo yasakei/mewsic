@@ -1,6 +1,3 @@
-//! Local web panel: a tiny dependency-free HTTP server that serves an embedded
-//! settings page plus JSON endpoints. Uses plain `TcpListener` + threads.
-
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,8 +19,6 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 
 const PANEL_HTML: &str = include_str!("../static/panel.html");
 
-/// Start the panel server on a background thread (idempotent).
-/// The socket is bound before returning so first-run setup can safely show the URL.
 pub fn start(ctx: &AppContext) -> bool {
     if RUNNING.swap(true, Ordering::SeqCst) {
         return true;
@@ -62,11 +57,9 @@ fn serve(listener: TcpListener, ctx: Arc<AppContext>) -> std::io::Result<()> {
 }
 
 fn handle(mut stream: TcpStream, ctx: Arc<AppContext>) {
-    // Guard against a client that connects and stalls mid-request.
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
     let mut reader = BufReader::new(&mut stream);
 
-    // Read the request line + headers.
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).is_err() {
         return;
@@ -84,7 +77,6 @@ fn handle(mut stream: TcpStream, ctx: Arc<AppContext>) {
     let method = parts.next().unwrap_or("GET").to_string();
     let path = parts.next().unwrap_or("/").to_string();
 
-    // Minimal body support for POST (read up to a few KB).
     let mut body_len = 0usize;
     for h in &headers {
         if let Some(v) = h.to_lowercase().strip_prefix("content-length:") {
@@ -173,8 +165,6 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
             let settings = ctx.settings.read().unwrap();
             let has_token = !settings.token.is_empty();
             let mut value = serde_json::to_value(&*settings).unwrap_or_else(|_| json!({}));
-            // Never hand the stored token back to the page; expose whether one
-            // is configured instead.
             if let Some(obj) = value.as_object_mut() {
                 obj.insert("token".into(), json!(""));
                 obj.insert("hasToken".into(), json!(has_token));
@@ -185,9 +175,6 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
         ("POST", "/api/settings") => {
             match serde_json::from_slice::<Settings>(body) {
                 Ok(mut new_settings) => {
-                    // The panel doesn't receive the stored token back, so an
-                    // omitted `token` field must keep the existing one rather
-                    // than clearing it.
                     if let Ok(raw) = serde_json::from_slice::<serde_json::Value>(body) {
                         match raw.get("token") {
                             Some(serde_json::Value::String(t)) => new_settings.token = t.clone(),

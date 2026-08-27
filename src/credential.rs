@@ -1,11 +1,3 @@
-//! Secure storage for the Discord user token.
-//!
-//! The token is kept in the OS credential manager (macOS Keychain, Windows
-//! Credential Manager, Linux Secret Service / KWallet) via the `keyring`
-//! crate. On systems with no keyring backend (e.g. a headless Linux box
-//! without a secret service) it falls back to a 0600-permission file so the
-//! token is never world-readable.
-
 use std::fs;
 use std::path::Path;
 
@@ -13,8 +5,6 @@ const KEYRING_SERVICE: &str = "mewsic";
 const KEYRING_USER: &str = "discord-token";
 
 fn entry() -> Option<keyring::Entry> {
-    // Overridable so tests can use a throwaway entry and never touch a real
-    // mewsic credential.
     let service = std::env::var("MEWSIC_KEYRING_SERVICE")
         .unwrap_or_else(|_| KEYRING_SERVICE.to_string());
     let user = std::env::var("MEWSIC_KEYRING_USER")
@@ -22,8 +12,6 @@ fn entry() -> Option<keyring::Entry> {
     keyring::Entry::new(&service, &user).ok()
 }
 
-/// Persist the token. Prefers the OS credential manager; falls back to a
-/// 0600 file in the config dir.
 pub fn store_token(dir: &Path, token: &str) -> Result<(), String> {
     if let Some(entry) = entry() {
         if entry.set_password(token).is_ok() {
@@ -34,7 +22,6 @@ pub fn store_token(dir: &Path, token: &str) -> Result<(), String> {
     fallback_store(dir, token)
 }
 
-/// Read the token back from the credential manager or the fallback file.
 pub fn load_token(dir: &Path) -> Option<String> {
     if let Some(entry) = entry() {
         if let Ok(token) = entry.get_password() {
@@ -44,7 +31,6 @@ pub fn load_token(dir: &Path) -> Option<String> {
     fallback_load(dir)
 }
 
-/// Remove the token from both the credential manager and the fallback file.
 pub fn clear_token(dir: &Path) {
     if let Some(entry) = entry() {
         let _ = entry.delete_credential();
@@ -84,9 +70,6 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// Unique temp dir per test: cargo runs tests in parallel threads sharing
-    /// one process id, so a shared path would make the tests race over the
-    /// token file (one test's cleanup deleting the other's data mid-run).
     fn test_dir(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("mewsic-cred-{}-{label}", std::process::id()))
     }

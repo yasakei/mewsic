@@ -28,7 +28,6 @@ Section "Install"
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
-  ; Add install dir to the system PATH
   ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
   ${If} $0 != ""
     WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path" "$0;$INSTDIR"
@@ -37,13 +36,11 @@ Section "Install"
   ${EndIf}
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 
-  ; Start menu shortcut
   CreateDirectory "$SMPROGRAMS\Mewsic"
   CreateShortcut "$SMPROGRAMS\Mewsic\Uninstall Mewsic.lnk" "$INSTDIR\uninstall.exe"
 SectionEnd
 
 Section "Uninstall"
-  ; Remove install dir from the system PATH
   ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
   ${WordReplace} "$0" ";$INSTDIR" "" "+" $0
   ${WordReplace} "$0" "$INSTDIR;" "" "+" $0

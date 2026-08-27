@@ -1,8 +1,3 @@
-//! Terminal user interface: live dashboard, setup wizard and settings editor.
-//!
-//! Built on [`ratatui`] (with the crossterm backend), which owns layout,
-//! resizing, wrapping and truncation — no hand-rolled ANSI alignment math.
-
 use std::io::IsTerminal;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -24,37 +19,28 @@ pub const PANEL_URL: &str = "http://localhost:8999";
 
 type Term = Terminal<CrosstermBackend<std::io::Stdout>>;
 
-/// The live ratatui terminal, created by [`enable_raw`] and torn down by
-/// [`disable_raw`]. Only ever touched from the main thread.
 static TERMINAL: Mutex<Option<Term>> = Mutex::new(None);
-
-// ─── Terminal lifecycle ──────────────────────────────────────────────────────
 
 pub fn stdout_is_tty() -> bool {
     std::io::stdout().is_terminal()
 }
 
-/// Enter raw mode, the alternate screen and start ratatui.
 pub fn enable_raw() {
     let term = ratatui::init();
     *TERMINAL.lock().unwrap() = Some(term);
 }
 
-/// Leave the alternate screen, restore the terminal and drop the UI.
 pub fn disable_raw() {
     TERMINAL.lock().unwrap().take();
     ratatui::restore();
 }
 
-/// Draw one frame through the shared terminal (no-op when not initialized).
 fn draw(f: impl FnOnce(&mut Frame<'_>)) {
     let mut guard = TERMINAL.lock().unwrap();
     if let Some(term) = guard.as_mut() {
         let _ = term.draw(f);
     }
 }
-
-// ─── Styled spans ────────────────────────────────────────────────────────────
 
 fn cyan_bold(s: &str) -> Span<'static> {
     Span::styled(
@@ -83,9 +69,6 @@ fn bold(s: &str) -> Span<'static> {
     Span::styled(s.to_string(), Style::default().add_modifier(Modifier::BOLD))
 }
 
-// ─── Screen + prompt rendering ───────────────────────────────────────────────
-
-/// A static screen: a title and a list of content lines.
 struct Screen {
     title: String,
     lines: Vec<Line<'static>>,
@@ -108,7 +91,6 @@ impl Screen {
     }
 }
 
-/// The live state of one prompt: question text, current input and a hint.
 struct Prompt<'a> {
     question: &'a str,
     input: &'a str,
@@ -130,10 +112,6 @@ fn block_with_title(title: &str) -> Block<'static> {
         .title_alignment(Alignment::Center)
 }
 
-/// Render `screen` with an optional prompt box and an optional footer hint.
-///
-/// Layout (top to bottom): content, prompt box, prompt hint row, footer hint.
-/// Each section gets its own row so nothing paints over anything else.
 fn draw_screen(screen: &Screen, prompt: Option<&Prompt>, footer: &str) {
     draw(|f| {
         let area = f.area();
@@ -145,11 +123,11 @@ fn draw_screen(screen: &Screen, prompt: Option<&Prompt>, footer: &str) {
         let has_footer = !footer.is_empty();
         let mut constraints = vec![Constraint::Min(1)];
         if has_prompt {
-            constraints.push(Constraint::Length(3)); // prompt box
-            constraints.push(Constraint::Length(1)); // prompt hint row
+            constraints.push(Constraint::Length(3));
+            constraints.push(Constraint::Length(1));
         }
         if has_footer {
-            constraints.push(Constraint::Length(1)); // footer row
+            constraints.push(Constraint::Length(1));
         }
         let chunks = Layout::vertical(constraints).split(inner);
 
@@ -161,7 +139,6 @@ fn draw_screen(screen: &Screen, prompt: Option<&Prompt>, footer: &str) {
         idx += 1;
 
         if let Some(p) = prompt {
-            // Prompt box: question + live input on one inner row.
             let pblock = Block::bordered()
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(Color::Blue));
@@ -180,7 +157,6 @@ fn draw_screen(screen: &Screen, prompt: Option<&Prompt>, footer: &str) {
             ]);
             f.render_widget(Paragraph::new(q), pinner);
 
-            // Cursor at the end of the input, inside the box (not on its border).
             let x = (pinner.x
                 + p.question.chars().count() as u16
                 + 1
@@ -190,7 +166,6 @@ fn draw_screen(screen: &Screen, prompt: Option<&Prompt>, footer: &str) {
             f.set_cursor_position(Position::new(x, y));
             idx += 1;
 
-            // Prompt hint row, below the box.
             let hint = Line::from(vec![Span::styled(
                 p.hint.clone(),
                 Style::default().fg(Color::DarkGray),
@@ -211,8 +186,6 @@ fn draw_screen(screen: &Screen, prompt: Option<&Prompt>, footer: &str) {
     });
 }
 
-// ─── Raw-mode input helpers ──────────────────────────────────────────────────
-
 fn read_key_blocking() -> Option<crossterm::event::KeyEvent> {
     loop {
         match event::read() {
@@ -225,16 +198,12 @@ fn read_key_blocking() -> Option<crossterm::event::KeyEvent> {
     }
 }
 
-/// True when the key is Ctrl+C. Crossterm parses the raw `0x03` byte as
-/// `Char('c')` with the CONTROL modifier (and some platforms report it as a
-/// literal `\u{3}`), so we accept both forms.
 fn is_ctrl_c(k: &crossterm::event::KeyEvent) -> bool {
     (matches!(k.code, KeyCode::Char('c') | KeyCode::Char('C'))
         && k.modifiers.contains(KeyModifiers::CONTROL))
         || matches!(k.code, KeyCode::Char('\u{3}'))
 }
 
-/// Read a single line of input, supporting backspace. Ctrl+C / Esc cancels.
 fn prompt_text(screen: &Screen, question: &str, default: &str, masked: bool) -> Option<String> {
     let mut buf = String::new();
     loop {
@@ -297,8 +266,6 @@ fn prompt_confirm(screen: &Screen, question: &str, default: bool) -> Option<bool
     }
 }
 
-/// Pick one of several choices by index number or name. The caller renders the
-/// option list itself; `keys` are the match strings. Enter picks `default`.
 fn prompt_choice<'a>(
     screen: &Screen,
     question: &str,
@@ -388,7 +355,6 @@ fn prompt_number(screen: &Screen, question: &str, default: u64, min: u64, max: u
     }
 }
 
-/// Wait for Enter (or cancel on Esc / Ctrl+C).
 fn prompt_continue(screen: &Screen) -> Option<()> {
     draw_screen(screen, None, "Press Enter to continue · Esc to cancel");
     loop {
@@ -400,14 +366,11 @@ fn prompt_continue(screen: &Screen) -> Option<()> {
     }
 }
 
-// ─── First-run screens ───────────────────────────────────────────────────────
-
 pub enum StartupMode {
     Web,
     Terminal,
 }
 
-/// First-run prompt: pick web panel or terminal setup.
 pub fn choose_startup_mode() -> StartupMode {
     let mut screen = Screen::new("Choose setup mode");
     screen.blank();
@@ -437,7 +400,6 @@ pub fn choose_startup_mode() -> StartupMode {
     }
 }
 
-/// Screen shown when the user picks the web panel on first run.
 pub fn show_web_panel_hint(panel_ready: bool) {
     let mut screen = Screen::new("Web panel");
     screen.blank();
@@ -457,10 +419,6 @@ pub fn show_web_panel_hint(panel_ready: bool) {
     let _ = prompt_continue(&screen);
 }
 
-// ─── Setup wizard ────────────────────────────────────────────────────────────
-
-/// Full interactive setup: token, view, timing, autostart.
-/// Returns `None` if the user cancelled.
 pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     if !stdout_is_tty() {
         return None;
@@ -468,7 +426,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
 
     let mut settings = ctx.settings.read().unwrap().clone();
 
-    // Welcome
     let mut welcome = Screen::new("Welcome");
     welcome.blank();
     welcome.push(Line::from(vec![cyan_bold("(=^･ω･^=) mewsic"), Span::raw("  terminal setup")]));
@@ -480,7 +437,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     ]));
     prompt_continue(&welcome)?;
 
-    // Step 1 — Playback source
     let mut source_screen = Screen::new("Source · Step 1/4");
     source_screen.push(Line::from(vec![dim("Step 1"), Span::raw("  "), bold("Music source")]));
     source_screen.push(Line::from(dim("Where mewsic reads the current track from.")));
@@ -516,7 +472,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
             prompt_text(&lf, "Last.fm username:", &settings.lastfm.username, false)?;
     }
 
-    // Step 2 — Account (Discord token, optional)
     let mut account = Screen::new("Account · Step 2/4");
     account.push(Line::from(vec![dim("Step 2"), Span::raw("  "), bold("Discord token")]));
     account.push(Line::from(dim(
@@ -539,7 +494,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
         settings.token = next;
     }
 
-    // Step 3 — Preview
     let mut preview = Screen::new("Preview · Step 3/5");
     preview.push(Line::from(vec![dim("Step 3"), Span::raw("  "), bold("Status style")]));
     preview.push(Line::from(dim("How the song text appears in Discord.")));
@@ -562,7 +516,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
             prompt_text(&preview, "Template", &settings.view.advanced.template, false)?;
     }
 
-    // Step 4 — Sync
     let mut sync = Screen::new("Sync · Step 4/5");
     sync.push(Line::from(vec![dim("Step 4"), Span::raw("  "), bold("Timing")]));
     sync.push(Line::from(dim(
@@ -582,7 +535,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     settings.timing.autooffset =
         prompt_number(&sync, "Autooffset samples", settings.timing.autooffset as u64, 1, 20)? as usize;
 
-    // Step 5 — Maintenance
     let mut maint = Screen::new("Maintenance · Step 5/5");
     maint.push(Line::from(vec![dim("Step 5"), Span::raw("  "), bold("Autostart")]));
     maint.push(Line::from(dim("Launch mewsic automatically when you log in.")));
@@ -601,7 +553,6 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     Some(())
 }
 
-/// A `key: value` summary row, green when the value is "good".
 fn kv(key: &str, value: &str, good: bool) -> Line<'static> {
     Line::from(vec![
         Span::styled(
@@ -694,7 +645,6 @@ fn summary_screen(settings: &crate::config::Settings) -> Screen {
     s
 }
 
-/// Plain-text summary, printed after `setup` finishes (post-TUI).
 pub fn summary(settings: &crate::config::Settings) -> String {
     let advanced = if settings.view.advanced.enabled {
         "enabled"
@@ -753,8 +703,6 @@ pub fn summary(settings: &crate::config::Settings) -> String {
     out
 }
 
-// ─── Settings editor ─────────────────────────────────────────────────────────
-
 fn notice_screen(title: &str, message: &str) -> Screen {
     let mut s = Screen::new(title);
     s.blank();
@@ -762,7 +710,6 @@ fn notice_screen(title: &str, message: &str) -> Screen {
     s
 }
 
-/// Section-based settings editor (Ctrl+S from the dashboard).
 pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
     if !stdout_is_tty() {
         return None;
@@ -913,8 +860,6 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
     }
 }
 
-// ─── Live dashboard ──────────────────────────────────────────────────────────
-
 fn info_row(label: &str, value: &str) -> Line<'static> {
     Line::from(vec![
         Span::styled(
@@ -926,7 +871,6 @@ fn info_row(label: &str, value: &str) -> Line<'static> {
     ])
 }
 
-/// Render the live dashboard once (non-blocking).
 pub fn render_dashboard(ctx: &AppContext) {
     let pb = engine::snapshot(ctx);
     let latency = engine::last_latency(ctx);
@@ -977,7 +921,6 @@ pub fn render_dashboard(ctx: &AppContext) {
         ])
         .areas(inner);
 
-        // Song / artist / time / ping
         let rows = vec![
             info_row("Song", &format!("{playing} {emoji}{song}")),
             info_row("Artist", &artist),
@@ -987,14 +930,12 @@ pub fn render_dashboard(ctx: &AppContext) {
         ];
         f.render_widget(Paragraph::new(rows), chunks[0]);
 
-        // Progress gauge
         let gauge = Gauge::default()
             .gauge_style(Style::default().fg(Color::Cyan))
             .ratio(pct / 100.0)
             .label(format!(" {pct:.0}% "));
         f.render_widget(gauge, chunks[1]);
 
-        // Lyrics + source
         let update_rows: Vec<Line<'static>> = {
             let st = ctx.shared.update.lock().unwrap();
             match &st.latest {
@@ -1015,7 +956,6 @@ pub fn render_dashboard(ctx: &AppContext) {
         lyr.extend(update_rows);
         f.render_widget(Paragraph::new(lyr).wrap(Wrap { trim: true }), chunks[2]);
 
-        // Footer
         let footer = Paragraph::new(Line::from(Span::styled(
             "Ctrl+S settings · Ctrl+B web panel · Ctrl+C quit",
             Style::default().fg(Color::DarkGray),
@@ -1025,9 +965,6 @@ pub fn render_dashboard(ctx: &AppContext) {
     });
 }
 
-/// Attach a terminal dashboard to an already-running background daemon.
-/// The daemon remains the sole owner of playback and Discord state; this TUI
-/// mirrors its localhost web API state into the normal dashboard renderer.
 pub fn run_remote_dashboard(ctx: &AppContext, _pid: u32) {
     enable_raw();
     let mut last_render = Instant::now() - Duration::from_secs(1);
@@ -1141,7 +1078,6 @@ fn push_remote_settings(ctx: &AppContext) {
         .send_string(&body);
 }
 
-/// Non-blocking poll for dashboard shortcuts. Returns `true` if quit.
 pub fn poll_shortcut(ctx: &AppContext) -> bool {
     let deadline = Instant::now() + Duration::from_millis(1);
     loop {

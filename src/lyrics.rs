@@ -1,9 +1,3 @@
-//! Synced-lyrics fetching with a layered source chain and a disk cache.
-//!
-//! Sources are tried in order (LrcLib → NetEase → QQ Music) and the first one
-//! that returns timed lines wins. Results are cached under
-//! `<config>/cache/<title>-<artist>.json` so repeat plays are instant.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,16 +8,11 @@ use crate::net;
 use crate::state::LyricsLine;
 use crate::util::{decode_html_entities, sanitize_filename, urlencode};
 
-// ─── Source trait ────────────────────────────────────────────────────────────
-
 pub trait Source {
     fn app_name(&self) -> &'static str;
     fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String>;
 }
 
-// ─── LrcLib ──────────────────────────────────────────────────────────────────
-
-/// https://lrclib.net/api
 pub struct LrcLibSource;
 
 impl Source for LrcLibSource {
@@ -53,9 +42,6 @@ impl Source for LrcLibSource {
     }
 }
 
-// ─── NetEase Music ───────────────────────────────────────────────────────────
-
-/// https://music.163.com/api
 pub struct NetEaseSource;
 
 impl Source for NetEaseSource {
@@ -117,9 +103,6 @@ impl NetEaseSource {
     }
 }
 
-// ─── QQ Music ────────────────────────────────────────────────────────────────
-
-/// https://c.y.qq.com lyric search (base64-encoded response, HTML entities).
 pub struct QqMusicSource;
 
 impl Source for QqMusicSource {
@@ -180,10 +163,6 @@ impl QqMusicSource {
     }
 }
 
-// ─── LRC parsing ─────────────────────────────────────────────────────────────
-
-/// Parse an LRC document: `[mm:ss.xx] text` lines, possibly several timestamps
-/// per line. Lines without a valid timestamp (metadata) are dropped.
 pub fn parse_lrc(text: &str) -> Vec<LyricsLine> {
     let mut out = Vec::new();
     for raw in text.lines() {
@@ -206,9 +185,6 @@ pub fn parse_lrc(text: &str) -> Vec<LyricsLine> {
     out
 }
 
-/// Collect every `[mm:ss(.xx)]` timestamp anywhere in `line`, returning the
-/// times (in ms) and the remaining text. Non-time `[...]` tags (e.g. `[ti:…]`)
-/// are treated as literal text.
 fn split_timestamps(line: &str) -> (Vec<u64>, String) {
     let mut times = Vec::new();
     let mut body = String::with_capacity(line.len());
@@ -223,7 +199,6 @@ fn split_timestamps(line: &str) -> (Vec<u64>, String) {
                 continue;
             }
         }
-        // Not a timestamp — keep the bracket literally and move on.
         body.push('[');
         rest = &rest[pos + 1..];
     }
@@ -231,7 +206,6 @@ fn split_timestamps(line: &str) -> (Vec<u64>, String) {
     (times, body)
 }
 
-/// Parse `mm:ss` or `mm:ss.xx` into milliseconds.
 fn parse_time(tag: &str) -> Option<u64> {
     let (min_s, sec_s) = tag.split_once(':')?;
     let min: u64 = min_s.trim().parse().ok()?;
@@ -239,19 +213,15 @@ fn parse_time(tag: &str) -> Option<u64> {
     Some(min * 60_000 + (sec * 1000.0).round() as u64)
 }
 
-// ─── Cache ───────────────────────────────────────────────────────────────────
-
 #[derive(Serialize, Deserialize)]
 struct CachedLyrics {
     source: String,
     lines: Vec<LyricsLine>,
 }
 
-/// Layered fetcher with on-disk caching.
 pub struct LyricsFetcher {
     sources: Vec<Box<dyn Source>>,
     cache_dir: PathBuf,
-    /// `title + artist` key of the last attempt, to avoid redundant refetches.
     last_fetched_for: String,
 }
 
@@ -298,8 +268,6 @@ impl LyricsFetcher {
         );
     }
 
-    /// Fetch timed lyrics for a track, checking the cache first. Returns the
-    /// lines plus a human-readable provenance string.
     pub fn fetch(&mut self, title: &str, artist: &str) -> Option<(Vec<LyricsLine>, String)> {
         self.last_fetched_for = format!("{title}{artist}");
 

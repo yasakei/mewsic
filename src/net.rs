@@ -1,5 +1,3 @@
-//! Shared blocking HTTP agent. One lightweight agent, reused everywhere.
-
 use std::time::Duration;
 
 use ureq::Agent;

@@ -1,5 +1,3 @@
-//! Talk to Discord (connections, user settings) and Spotify (player state).
-
 use serde_json::json;
 
 use crate::net;
@@ -23,7 +21,6 @@ pub struct PlayerState {
     pub artist: String,
 }
 
-/// Ask Discord for the Spotify access token it already holds.
 pub fn fetch_spotify_token(discord_token: &str) -> Result<String, FetchError> {
     let url = format!("{DISCORD_API}/users/@me/connections");
     let resp = net::agent()
@@ -53,7 +50,6 @@ pub fn fetch_spotify_token(discord_token: &str) -> Result<String, FetchError> {
     ))
 }
 
-/// Poll the Spotify player endpoint. Returns `None` when nothing is playing.
 pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchError> {
     let url = format!("{SPOTIFY_API}/me/player");
     let resp = net::agent()
@@ -65,7 +61,6 @@ pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchErr
             other => FetchError::Other(other.to_string()),
         })?;
 
-    // 204 = no active device / nothing queued
     if resp.status() == 204 {
         return Ok(None);
     }
@@ -96,7 +91,6 @@ pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchErr
     }))
 }
 
-/// PATCH the custom status. Empty text + emoji clears it.
 pub fn patch_status(discord_token: &str, text: &str, emoji: &str) -> Result<(), FetchError> {
     let url = format!("{DISCORD_API}/users/@me/settings");
 
@@ -133,7 +127,6 @@ pub fn patch_status(discord_token: &str, text: &str, emoji: &str) -> Result<(), 
     Ok(())
 }
 
-/// Verify a Discord token against the user endpoint.
 pub fn validate_token(token: &str) -> bool {
     let url = format!("{DISCORD_API}/users/@me");
     net::agent()
@@ -144,7 +137,6 @@ pub fn validate_token(token: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Strip ` (anything)` and trailing spaces from a track title.
 pub fn cleanup_title(title: &str) -> String {
     let t = title.trim();
     match t.find(" (") {

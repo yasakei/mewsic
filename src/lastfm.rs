@@ -1,9 +1,3 @@
-//! Last.fm playback source via the public Audioscrobbler API.
-//!
-//! Last.fm has no playback *position*, so `progress_ms` is always reported as
-//! zero and the engine's local clock advances it between polls. `track.getInfo`
-//! supplies the track length so the sync stays sane.
-
 use serde_json::Value;
 
 use crate::connector::{FetchError, PlayerState};
@@ -12,16 +6,8 @@ use crate::util::urlencode;
 
 const LASTFM_API: &str = "https://ws.audioscrobbler.com/2.0/";
 
-/// A detection lag estimate (ms) is only trusted when it falls in this range.
-/// Anything larger almost certainly means the player paused or started long
-/// before mewsic began polling — in that case the caller uses a default.
 pub const TRUSTED_LAG_MS: u64 = 10_000;
 
-/// Fetch the currently-scrobbling track for `username`, plus the Unix end
-/// time of the previous *completed* scrobble. That end time is an upper bound
-/// for when the current song started, which lets the engine compensate for the
-/// fact that it only *notices* the track a few seconds in. Returns `Ok(None)`
-/// when nothing is playing right now.
 pub fn fetch_player(
     api_key: &str,
     username: &str,
@@ -46,8 +32,6 @@ pub fn fetch_player(
     Ok(Some((state, prev_uts)))
 }
 
-/// Unix end time of the most recent completed scrobble (`track[1]`) — the
-/// track that played right before the current nowplaying one.
 fn previous_scrobble_uts(json: &Value) -> Option<u64> {
     let track = json.pointer("/recenttracks/track/1")?;
     track
@@ -56,10 +40,6 @@ fn previous_scrobble_uts(json: &Value) -> Option<u64> {
         .and_then(as_u64_value)
 }
 
-/// Estimate how long ago the current song started, in ms, from `now_secs`
-/// (wall clock) and `prev_secs` (previous scrobble's Unix end time). Returns
-/// `None` when the estimate isn't trustworthy — clock skew, a pause, or a
-/// track that began before mewsic started polling.
 pub fn measure_lag(now_secs: u64, prev_secs: u64) -> Option<u64> {
     let lag = now_secs.checked_sub(prev_secs)? * 1000;
     if lag > TRUSTED_LAG_MS {
@@ -68,8 +48,6 @@ pub fn measure_lag(now_secs: u64, prev_secs: u64) -> Option<u64> {
     Some(lag)
 }
 
-/// Parse a `user.getRecentTracks` response into the nowplaying track, or
-/// `Ok(None)` when nothing is currently playing.
 fn parse_nowplaying(json: &Value) -> Result<Option<PlayerState>, FetchError> {
     if let Some(err) = json.get("error") {
         let msg = json
@@ -98,8 +76,6 @@ fn parse_nowplaying(json: &Value) -> Result<Option<PlayerState>, FetchError> {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    // `artist`/`album` are objects (`{"#text": "…", "mbid": "…"}`) in JSON
-    // responses, but some edge cases return a plain string — handle both.
     let artist = track
         .get("artist")
         .map(json_text)
@@ -117,19 +93,13 @@ fn parse_nowplaying(json: &Value) -> Result<Option<PlayerState>, FetchError> {
     Ok(Some(PlayerState {
         is_playing: true,
         progress_ms: 0,
-        duration_ms: 0, // filled in by `fetch_player` after the getInfo call
-        // Same track replayed back-to-back must still count as a new song,
-        // hence a synthetic id instead of name+artist alone.
+        duration_ms: 0,
         track_id: format!("{mbid}|{artist}|{name}"),
         name,
         artist,
     }))
 }
 
-/// `track.getInfo` reports the length, but its unit is inconsistent — some
-/// tracks come back in seconds ("242") and some already in milliseconds
-/// ("226000"), always as a JSON string. Values ≥ 60_000 are treated as ms;
-/// smaller values are seconds. Failure is non-fatal.
 fn fetch_duration_ms(api_key: &str, artist: &str, track: &str) -> Option<u64> {
     let url = format!(
         "{LASTFM_API}?method=track.getInfo&artist={}&track={}&api_key={}&format=json",
@@ -148,7 +118,6 @@ fn fetch_duration_ms(api_key: &str, artist: &str, track: &str) -> Option<u64> {
     Some(if raw >= 60_000 { raw } else { raw.saturating_mul(1000) })
 }
 
-/// Extract a nested `#text` (JSON `{"#text": "…"}`) or a plain string value.
 fn json_text(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -161,7 +130,6 @@ fn json_text(v: &Value) -> String {
     }
 }
 
-/// Read a u64 from either a JSON number or a numeric string.
 fn as_u64_value(v: &Value) -> Option<u64> {
     match v {
         Value::Number(n) => n.as_u64(),
@@ -218,7 +186,6 @@ mod tests {
 
     #[test]
     fn duration_seconds_vs_millis() {
-        // Simulated /track/duration values.
         assert_eq!(as_u64_value(&Value::from("242")), Some(242));
         assert_eq!(as_u64_value(&Value::from(226000)), Some(226000));
         let secs = as_u64_value(&serde_json::json!("242")).unwrap();
@@ -251,14 +218,9 @@ mod tests {
 
     #[test]
     fn lag_is_measured_from_previous_scrobble_end() {
-        // Played 3 s ago: trusted, converted to ms.
         assert_eq!(measure_lag(1_700_000_005, 1_700_000_000), Some(5_000));
-        // Started before mewsic began polling / long pause: untrusted.
         assert_eq!(measure_lag(1_700_000_100, 1_700_000_000), None);
-        // Clock skew: untrusted.
         assert_eq!(measure_lag(1_700_000_000, 1_700_000_001), None);
-        // Tight gapless transition: still trusted (even 0 ms).
         assert_eq!(measure_lag(1_700_000_001, 1_700_000_001), Some(0));
     }
 }
-

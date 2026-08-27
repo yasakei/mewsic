@@ -1,15 +1,3 @@
-//! Auto-updater.
-//!
-//! Checks the Mewsic update API for a newer CI-built release for this
-//! platform, downloads it, verifies it against the release's
-//! `checksums.txt`, and replaces the running binary in place. Checks happen on
-//! interactive launch or via `mewsic update` / `mewsic update check`.
-//!
-//! Replacing the executable is safe while running: on Unix the old inode keeps
-//! executing until the process exits; on Windows renaming an open executable
-//! is permitted, so the same rename-away trick works. Installers (NSIS on
-//! Windows) are the fallback when the install directory needs elevation.
-
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,14 +9,10 @@ use crate::state::{AppContext, UpdateState};
 
 const USER_AGENT: &str = "mewsic-updater";
 const LATEST_API: &str = "https://api.update.mewsic.yasakei.dev/latest";
-/// Asset name of the sha256 manifest uploaded with every release.
 const CHECKSUM_ASSET: &str = "checksums.txt";
-/// Windows-only fallback: the NSIS installer rebuilt with each release.
 #[cfg_attr(not(windows), allow(dead_code))]
 const WINDOWS_INSTALLER_ASSET: &str = "mewsic-setup.exe";
 
-/// Name of the artifact GitHub publishes for this platform, or `None` when the
-/// current platform isn't released.
 pub fn asset_name() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("windows", "x86_64") => Some("mewsic-x86_64-pc-windows-msvc.exe"),
@@ -40,13 +24,11 @@ pub fn asset_name() -> Option<&'static str> {
     }
 }
 
-/// Response returned by the Mewsic update API's `/latest` endpoint.
 #[derive(Debug, Clone, Deserialize)]
 struct LatestResponse {
     release: Release,
 }
 
-/// A release returned by the Mewsic update API.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Release {
     #[serde(alias = "tag")]
@@ -62,7 +44,6 @@ pub struct Asset {
 }
 
 impl Release {
-    /// Version without the leading `v`, if one is supplied.
     fn version(&self) -> &str {
         self.tag_name.trim_start_matches('v')
     }
@@ -72,8 +53,6 @@ impl Release {
     }
 }
 
-/// `true` when `next` is strictly newer than `current`. Compares numeric
-/// components (1.0.10 > 1.0.2); a leading `v` and suffixes are ignored.
 pub fn is_newer(next: &str, current: &str) -> bool {
     let n = version_parts(next);
     let c = version_parts(current);
@@ -87,8 +66,6 @@ pub fn is_newer(next: &str, current: &str) -> bool {
     false
 }
 
-/// Leading decimal numbers of each `.`/`-`/`+`-separated component, so
-/// pre-release suffixes and build metadata don't skew the comparison.
 fn version_parts(v: &str) -> Vec<u64> {
     v.trim_start_matches('v')
         .split(['.', '-', '+'])
@@ -118,7 +95,6 @@ fn get(url: &str) -> Result<ureq::Response, String> {
         .map_err(|e| e.to_string())
 }
 
-/// The newest release, or `None` when the repository has no releases yet.
 pub fn latest_release() -> Result<Option<Release>, String> {
     let resp = get(LATEST_API)?;
     match resp.status() {
@@ -148,8 +124,6 @@ fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Look up the expected sha256 of `asset` in a `checksums.txt` manifest
-/// (one `<hash>  <name>` per line, as written by the release workflow).
 fn expected_sha256(checksums: &str, asset: &str) -> Option<String> {
     checksums.lines().find_map(|line| {
         let mut it = line.split_whitespace();
@@ -166,20 +140,14 @@ fn update_dir(ctx: &AppContext) -> PathBuf {
     ctx.config_dir.join("update")
 }
 
-/// Outcome of trying to install a verified update.
 #[derive(Debug)]
 pub enum ApplyOutcome {
-    /// New binary is in place on disk; effective on the next launch.
     Replaced,
-    /// Windows: the elevated NSIS installer was launched (manual runs only).
     #[cfg_attr(not(windows), allow(dead_code))]
     NeedsElevation,
-    /// Downloaded + verified, kept at `PathBuf` awaiting a manual install.
     Staged(PathBuf),
 }
 
-/// Download the platform asset of `release`, verify it against the release's
-/// `checksums.txt`, and stage it in the config dir. Returns the staged path.
 fn download_and_verify(
     ctx: &AppContext,
     release: &Release,
@@ -211,8 +179,6 @@ fn download_and_verify(
     Ok(staged)
 }
 
-/// Swap `staged` in over the running executable: move the current binary to a
-/// `.old` sibling, copy the new one into place, then drop the `.old`.
 fn install_in_place(exe: &Path, staged: &Path) -> Result<(), String> {
     let dir = exe
         .parent()
@@ -222,7 +188,6 @@ fn install_in_place(exe: &Path, staged: &Path) -> Result<(), String> {
         exe.file_name().unwrap_or_default().to_string_lossy()
     ));
 
-    // Probe directory writability without touching the running binary.
     let probe = dir.join(".mewsic-update-probe");
     std::fs::write(&probe, b"")
         .map_err(|e| format!("install directory is not writable ({e})"))?;
@@ -230,7 +195,6 @@ fn install_in_place(exe: &Path, staged: &Path) -> Result<(), String> {
 
     std::fs::rename(exe, &old).map_err(|e| format!("could not move the current binary aside: {e}"))?;
     if let Err(e) = std::fs::copy(staged, exe) {
-        // Roll the old binary back before reporting failure.
         let _ = std::fs::rename(&old, exe);
         return Err(format!("could not copy the update into place: {e}"));
     }
@@ -243,7 +207,6 @@ fn install_in_place(exe: &Path, staged: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// What to do when [`install_in_place`] can't write to the install directory.
 fn fallback_install(
     ctx: &AppContext,
     release: &Release,
@@ -253,7 +216,6 @@ fn fallback_install(
     #[cfg(windows)]
     {
         if !manual {
-            // Only explicit/manual updates may show a UAC prompt.
             return Ok(ApplyOutcome::Staged(staged.to_path_buf()));
         }
         let checksums = match release.asset(CHECKSUM_ASSET) {
@@ -274,7 +236,7 @@ fn fallback_install(
         let dest = update_dir(ctx).join(format!("{WINDOWS_INSTALLER_ASSET}.{}", release.version()));
         std::fs::write(&dest, &data).map_err(|e| format!("could not stage the installer: {e}"))?;
         std::process::Command::new(&dest)
-            .arg("/S") // NSIS silent install — the OS shows the UAC prompt.
+            .arg("/S")
             .spawn()
             .map_err(|e| format!("could not launch the installer: {e}"))?;
         Ok(ApplyOutcome::NeedsElevation)
@@ -300,14 +262,10 @@ fn fallback_install(
     }
 }
 
-/// Internal elevated entry point. The target is always this executable, so a
-/// caller cannot use the helper to overwrite an arbitrary path.
 pub fn apply_staged_as_admin(staged: &Path) -> Result<(), String> {
     install_in_place(&current_exe()?, staged)
 }
 
-/// Check the update API for a newer release and install it when one exists.
-/// `manual` is set for `mewsic update` (allows elevating via the Windows installer).
 pub fn run_update(ctx: &AppContext, manual: bool) -> UpdateState {
     let current = env!("CARGO_PKG_VERSION");
     let Some(asset) = asset_name() else {
@@ -392,8 +350,6 @@ pub fn run_update(ctx: &AppContext, manual: bool) -> UpdateState {
     record(ctx, state)
 }
 
-/// `mewsic update check`: report whether a newer release exists, download
-/// nothing.
 pub fn check_only(ctx: &AppContext) -> UpdateState {
     let current = env!("CARGO_PKG_VERSION");
     let state = match asset_name() {

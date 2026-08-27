@@ -1,5 +1,3 @@
-//! Shared runtime state between the poller, status sender and UI.
-
 use std::sync::{Arc, Mutex, RwLock};
 
 use serde::{Deserialize, Serialize};
@@ -32,19 +30,12 @@ impl Playback {
     }
 }
 
-/// Tracks which lyric lines have been pushed to Discord and latency history.
 #[derive(Debug, Default)]
 pub struct Tracker {
-    /// Timestamps of lines already sent for the current song.
     pub sent_lines: Vec<u64>,
-    /// Song id at the time of the last status send.
     pub last_seen_song: String,
-    /// Rolling latency samples (ms) for autooffset.
     pub latencies: Vec<u64>,
     pub last_latency: u64,
-    /// Last.fm only: estimated detection lag (ms) — how long ago the current
-    /// song started before the poller first noticed it. `None` until measured
-    /// or when the estimate isn't trustworthy.
     pub lastfm_lag: Option<u64>,
 }
 
@@ -66,24 +57,16 @@ impl Tracker {
     }
 }
 
-/// Result of the latest manual update check / install attempt, shown in the
-/// TUI and web panel.
 #[derive(Debug, Clone, Default)]
 pub struct UpdateState {
-    /// Newest released version (tag without `v`) if the check found one.
     pub latest: Option<String>,
-    /// Human-readable outcome of the last check ("up to date", "v1.0.3
-    /// installed — restart to apply", a staged path, or a check error).
     pub message: String,
 }
 
-/// Everything the UI and web panel read, wrapped in cheap locks.
 pub struct Shared {
     pub playback: Mutex<Playback>,
     pub tracker: Mutex<Tracker>,
-    /// Human-readable provenance of the current lyrics ("LrcLib", "cache", ...).
     pub lyric_source: Mutex<String>,
-    /// Feedback of the auto-updater (see [`UpdateState`]).
     pub update: Mutex<UpdateState>,
 }
 
@@ -98,7 +81,6 @@ impl Shared {
     }
 }
 
-/// Handles both live reloads (wizard / web panel) and the settings snapshot.
 pub struct AppContext {
     pub shared: Arc<Shared>,
     pub settings: Arc<RwLock<Settings>>,

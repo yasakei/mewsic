@@ -1,6 +1,3 @@
-//! Best-effort autostart: `.desktop` file on Linux, LaunchAgent on macOS,
-//! HKCU Run registry entry on Windows.
-
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -8,8 +5,6 @@ use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::process::Command;
 
-// `APP_NAME` and `command_for_autostart` are only used by the Linux and
-// Windows autostart backends; macOS builds its LaunchAgent plist directly.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 const APP_NAME: &str = "mewsic";
 
@@ -20,16 +15,12 @@ fn home() -> PathBuf {
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn command_for_autostart() -> String {
-    // Reuse the current executable + a `background` argument so login launches
-    // a detached daemon (with the web panel) that survives the terminal and
-    // keeps updating the status. `mewsic kill background` stops it.
     match std::env::current_exe() {
         Ok(exe) => format!("\"{}\" background", exe.to_string_lossy()),
         Err(_) => "mewsic background".to_string(),
     }
 }
 
-/// Apply the autostart setting. Failures are logged, never fatal.
 pub fn apply(enabled: bool) {
     let result = apply_inner(enabled);
     if let Err(e) = result {

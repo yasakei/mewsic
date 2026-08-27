@@ -46,8 +46,6 @@ ENVIRONMENT:
   MEWSIC_CONFIG_DIR     Override the config directory (default ~/.config/mewsic)
 ";
 
-/// CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS: keep the daemon out of the
-/// console's process group so closing the console window doesn't kill it.
 #[cfg(windows)]
 const DETACHED_SPAWN_FLAGS: u32 = 0x0000_0200 | 0x0000_0008;
 
@@ -97,14 +95,10 @@ fn run(with_web: bool) {
     let ctx = init_context();
     let interactive = tui::stdout_is_tty();
 
-    // Update checks are manual. A plain interactive launch offers an update
-    // before ratatui takes ownership of the terminal.
     if interactive && !with_web {
         offer_startup_update(&ctx);
     }
 
-    // A background daemon owns the engine. Attach this terminal to its live
-    // state instead of starting a second engine.
     if let Some((pid, file)) = running_instance() {
         if file == "background.pid" && !with_web && interactive {
             tui::run_remote_dashboard(&ctx, pid);
@@ -116,19 +110,12 @@ fn run(with_web: bool) {
         std::process::exit(1);
     }
 
-    // Write a PID file so `mewsic stop` can find this instance. The guard
-    // removes it on clean exit.
     let _pid = PidGuard::new(config::config_dir().join("mewsic.pid"));
 
-    // Enter the TUI session up front when interactive: the startup wizard and
-    // settings screens render through ratatui, so the terminal must be ready
-    // before any of them run.
     if interactive {
         tui::enable_raw();
     }
 
-    // First run with nothing configured: offer a choice. A Last.fm setup that
-    // deliberately skipped the Discord token is considered configured.
     let mut with_web = with_web;
     let needs_setup = {
         let s = ctx.settings.read().unwrap();
@@ -176,7 +163,6 @@ fn run(with_web: bool) {
         }
         tui::disable_raw();
     } else {
-        // Headless: keep ticking quietly until stopped.
         run_headless(&ctx, &engine, with_web);
     }
 
@@ -184,7 +170,6 @@ fn run(with_web: bool) {
     log::write("mewsic stopped");
 }
 
-/// Tick the engine in a loop without a TUI until `quit` is signalled.
 fn run_headless(ctx: &Arc<AppContext>, engine: &Arc<engine::Engine>, with_web: bool) {
     if with_web {
         web::start(ctx);
@@ -199,8 +184,6 @@ fn run_headless(ctx: &Arc<AppContext>, engine: &Arc<engine::Engine>, with_web: b
     }
 }
 
-/// The pid + pid-file name of a live instance already running, if any.
-/// Stale PID files (dead processes) are ignored and overwritten on start.
 fn running_instance() -> Option<(u32, String)> {
     for name in ["mewsic.pid", "background.pid"] {
         let path = config::config_dir().join(name);
@@ -215,9 +198,6 @@ fn running_instance() -> Option<(u32, String)> {
     None
 }
 
-/// `mewsic background`: spawn a detached copy of this binary (the internal
-/// `_background` command) and return immediately. The child survives the
-/// terminal closing, so playback keeps going.
 fn background() {
     if let Some((pid, _file)) = running_instance() {
         eprintln!(
@@ -236,10 +216,6 @@ fn background() {
     let cfg_dir = config::config_dir();
     let _ = std::fs::create_dir_all(&cfg_dir);
 
-    // Detach the child: on Unix it gets its own process group so the SIGHUP a
-    // closing terminal sends to the foreground group can't touch it; on Windows
-    // it gets a fresh process group with no console attached, so closing the
-    // console window can't kill it either.
     let mut cmd = std::process::Command::new(&exe);
     cmd.arg("_background")
         .current_dir(&cfg_dir)
@@ -266,9 +242,6 @@ fn background() {
     };
     let pid = child.id();
 
-    // Wait briefly for the child to write its PID file, so we can report
-    // whether it actually came up (e.g. it might have been rejected because
-    // another instance started in the meantime).
     let deadline = Instant::now() + Duration::from_millis(1000);
     loop {
         if child.try_wait().ok().flatten().is_some() {
@@ -291,7 +264,6 @@ fn background() {
     println!("It keeps playing after this terminal closes — stop it with `mewsic kill background`.");
 }
 
-/// Internal entry point of the detached child spawned by [`background`].
 fn background_child() {
     let ctx = init_context();
     if let Some((pid, _file)) = running_instance() {
@@ -310,7 +282,6 @@ fn background_child() {
     crate::log::write("background engine stopped");
 }
 
-/// `mewsic kill <target>` — stop the background daemon or disable autostart.
 fn kill(target: Option<&str>) {
     match target {
         Some("background") => kill_background(),
@@ -369,9 +340,6 @@ fn kill_autostart() {
     }
 }
 
-/// Disable startup integration, stop other instances and remove this binary.
-/// User settings are intentionally retained so reinstalling does not discard
-/// credentials or preferences.
 fn uninstall() {
     let ctx = init_context();
     {
@@ -447,7 +415,6 @@ fn remove_current_executable(exe: &std::path::Path) -> std::io::Result<()> {
     }
 }
 
-/// Removes its PID file when dropped.
 struct PidGuard(PathBuf);
 
 impl PidGuard {
@@ -498,9 +465,6 @@ fn settings() {
     tui::disable_raw();
 }
 
-/// `mewsic update` / `mewsic update check` — check the Mewsic update API
-/// and install it when one exists. Manual installs request administrator
-/// authorization when the executable's directory is not writable.
 fn update_command(sub: Option<&str>) {
     let ctx = init_context();
     let state = match sub {
@@ -592,7 +556,6 @@ fn process_alive(pid: u32) -> bool {
 
 #[cfg(not(unix))]
 fn process_alive(pid: u32) -> bool {
-    // Windows: tasklist returns a non-zero exit code when the pid is gone.
     let out = std::process::Command::new("tasklist")
         .args(["/FI", &format!("PID eq {pid}"), "/NH"])
         .output();

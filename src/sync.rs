@@ -1,12 +1,9 @@
-//! Build the Discord status string from the current lyric line and settings.
-
 use crate::config::Settings;
 use crate::state::{LyricsLine, Playback};
 use crate::util::{crop, format_seconds, letters_only};
 
 pub const MAX_STATUS_LENGTH: usize = 128;
 
-/// Compose the status text + emoji for a line according to the view settings.
 pub fn build_status(settings: &Settings, playback: &Playback, line: &LyricsLine) -> (String, String) {
     if settings.view.advanced.enabled {
         (
@@ -30,14 +27,12 @@ pub fn build_status(settings: &Settings, playback: &Playback, line: &LyricsLine)
     }
 }
 
-/// Interpolate `{placeholder}` tokens in an advanced template.
 fn render_template(template: &str, playback: &Playback, line: &LyricsLine) -> String {
     let song = &playback.song_name;
     let author = &playback.song_author;
     let ts = format_seconds(line.time / 1000);
     let cropped = |s: &str| -> String {
         let s = s.trim();
-        // Strip a trailing " - ..." (feat./remix suffix) or "(...)" tag.
         match s.find(" -").or_else(|| s.find('(')) {
             Some(i) => s[..i].trim().to_string(),
             None => s.to_string(),
@@ -45,7 +40,6 @@ fn render_template(template: &str, playback: &Playback, line: &LyricsLine) -> St
     };
 
     let mut out = template.to_string();
-    // Longest-first ordering keeps `{lyrics_upper}` safe from `{lyrics}`.
     let tokens = [
         ("{lyrics_upper_letters_only}", letters_only(&line.text.to_uppercase())),
         ("{lyrics_lower_letters_only}", letters_only(&line.text.to_lowercase())),

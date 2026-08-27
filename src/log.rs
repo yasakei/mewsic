@@ -1,5 +1,3 @@
-//! Minimal append-only file logger.
-
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -27,14 +25,12 @@ impl Logger {
     }
 }
 
-/// Initialise the logger against `config_dir/log.txt`.
 pub fn init(config_dir: &Path) {
     let path: PathBuf = config_dir.join("log.txt");
     let mut guard = LOGGER.lock().unwrap();
     *guard = Logger::open(&path);
 }
 
-/// Append a line to the log. Never panics.
 pub fn write(msg: &str) {
     if let Ok(mut guard) = LOGGER.lock() {
         if let Some(logger) = guard.as_mut() {
