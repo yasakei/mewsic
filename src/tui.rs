@@ -1104,10 +1104,11 @@ fn poll_remote_shortcut(ctx: &AppContext) -> bool {
                 if is_ctrl_c(&k) {
                     return true;
                 }
-                if k.code == KeyCode::Char('s') && k.modifiers.contains(KeyModifiers::CONTROL) {
-                    if run_settings_editor(ctx).is_some() {
-                        push_remote_settings(ctx);
-                    }
+                if k.code == KeyCode::Char('s')
+                    && k.modifiers.contains(KeyModifiers::CONTROL)
+                    && run_settings_editor(ctx).is_some()
+                {
+                    push_remote_settings(ctx);
                 }
                 false
             }

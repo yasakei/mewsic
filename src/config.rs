@@ -155,7 +155,7 @@ impl Default for TimingSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
     /// Launch on login.
@@ -163,15 +163,6 @@ pub struct UpdateSettings {
     /// Legacy setting kept so older configuration files still deserialize.
     /// Update checks are now initiated only by interactive/manual commands.
     pub auto_check: bool,
-}
-
-impl Default for UpdateSettings {
-    fn default() -> Self {
-        UpdateSettings {
-            auto_start: false,
-            auto_check: false,
-        }
-    }
 }
 
 impl Settings {
