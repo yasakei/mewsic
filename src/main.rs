@@ -72,6 +72,7 @@ fn main() {
         "update" => update_command(args.get(1).map(|s| s.as_str())),
         "kill" => kill(args.get(1).map(|s| s.as_str())),
         "_background" => background_child(),
+        "_apply-update" => apply_update_helper(args.get(1)),
         other => {
             eprintln!("unknown command: {other}\n");
             println!("{HELP}");
@@ -94,11 +95,21 @@ fn init_context() -> Arc<AppContext> {
 
 fn run(with_web: bool) {
     let ctx = init_context();
+    let interactive = tui::stdout_is_tty();
 
-    // Refuse to run a second live instance — check both the foreground and
-    // background PID files so a dashboard and a daemon never fight over the
-    // Discord status.
+    // Update checks are manual. A plain interactive launch offers an update
+    // before ratatui takes ownership of the terminal.
+    if interactive && !with_web {
+        offer_startup_update(&ctx);
+    }
+
+    // A background daemon owns the engine. Attach this terminal to its live
+    // state instead of starting a second engine.
     if let Some((pid, file)) = running_instance() {
+        if file == "background.pid" && !with_web && interactive {
+            tui::run_remote_dashboard(&ctx, pid);
+            return;
+        }
         eprintln!(
             "mewsic is already running (pid {pid}, {file}). Run `mewsic stop` or `mewsic kill background` first."
         );
@@ -112,7 +123,6 @@ fn run(with_web: bool) {
     // Enter the TUI session up front when interactive: the startup wizard and
     // settings screens render through ratatui, so the terminal must be ready
     // before any of them run.
-    let interactive = tui::stdout_is_tty();
     if interactive {
         tui::enable_raw();
     }
@@ -142,7 +152,6 @@ fn run(with_web: bool) {
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
-    update::spawn_checker(ctx.clone());
 
     if interactive {
         if with_web {
@@ -296,7 +305,6 @@ fn background_child() {
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
-    update::spawn_checker(ctx.clone());
     run_headless(&ctx, &engine, true);
     engine.shutdown();
     crate::log::write("background engine stopped");
@@ -490,9 +498,9 @@ fn settings() {
     tui::disable_raw();
 }
 
-/// `mewsic update` / `mewsic update check` — check GitHub for a newer release
-/// and install it when one exists. Manual mode may fall back to the elevated
-/// Windows installer; the background checker never elevates on its own.
+/// `mewsic update` / `mewsic update check` — check the Mewsic update API
+/// and install it when one exists. Manual installs request administrator
+/// authorization when the executable's directory is not writable.
 fn update_command(sub: Option<&str>) {
     let ctx = init_context();
     let state = match sub {
@@ -505,6 +513,34 @@ fn update_command(sub: Option<&str>) {
         _ => update::run_update(&ctx, true),
     };
     println!("{}", state.message);
+}
+
+fn offer_startup_update(ctx: &AppContext) {
+    let state = update::check_only(ctx);
+    let Some(version) = state.latest else {
+        return;
+    };
+
+    println!("A new version (v{version}) is available. Download and install it now? [Y/n]");
+    let mut answer = String::new();
+    if std::io::stdin().read_line(&mut answer).is_err() {
+        return;
+    }
+    if answer.trim().is_empty() || answer.trim().eq_ignore_ascii_case("y") {
+        println!("Downloading and installing v{version}...");
+        let result = update::run_update(ctx, true);
+        println!("{}", result.message);
+    }
+}
+
+fn apply_update_helper(staged: Option<&String>) {
+    let Some(staged) = staged else {
+        std::process::exit(2);
+    };
+    if let Err(e) = update::apply_staged_as_admin(std::path::Path::new(staged)) {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
 }
 
 fn stop() {

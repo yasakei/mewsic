@@ -38,8 +38,9 @@ Mewsic runs as a single native binary:
 -  Terminal dashboard with live progress bar, plus a web panel served on
   `http://127.0.0.1:8999`.
 - Detached background mode: `mewsic background` keeps playing after the
-  terminal closes, stopped with `mewsic kill background`.
-- Automatic updates: checks GitHub releases on startup and every 6 hours,
+  terminal closes; running `mewsic` again attaches the TUI to that daemon.
+- Manual updates: checks the Mewsic update API on interactive launch or with
+  `mewsic update`,
   verifies the download against the release checksums, and swaps the new
   binary in place (restart mewsic to use it). Windows installs in elevated
   directories fall back to a silent NSIS installer; `mewsic update` forces a

@@ -66,8 +66,8 @@ impl Tracker {
     }
 }
 
-/// Result of the latest update check / install attempt, shown in the TUI and
-/// web panel. Written only by the update checker thread.
+/// Result of the latest manual update check / install attempt, shown in the
+/// TUI and web panel.
 #[derive(Debug, Clone, Default)]
 pub struct UpdateState {
     /// Newest released version (tag without `v`) if the check found one.
