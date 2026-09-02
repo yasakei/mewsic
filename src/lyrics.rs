@@ -288,12 +288,20 @@ fn parse_time(tag: &str) -> Option<u64> {
 struct CachedLyrics {
     source: String,
     lines: Vec<LyricsLine>,
+    /// The same lines with `lyrics.romanize` applied, filled in the first
+    /// time the song is loaded with romanization enabled. Older cache files
+    /// lack the field and deserialize to an empty vec.
+    #[serde(default)]
+    romanized: Vec<LyricsLine>,
 }
 
 pub struct LyricsFetcher {
     cache_dir: PathBuf,
     last_fetched_for: String,
     last_provider_sig: String,
+    /// Romanization flag the current cache read/fetch was made with, so a
+    /// setting change triggers a reload from cache.
+    last_romanize: Option<bool>,
 }
 
 impl LyricsFetcher {
@@ -302,6 +310,7 @@ impl LyricsFetcher {
             cache_dir: config_dir.join("cache"),
             last_fetched_for: String::new(),
             last_provider_sig: String::new(),
+            last_romanize: None,
         }
     }
 
@@ -316,18 +325,51 @@ impl LyricsFetcher {
         self.last_fetched_for.is_empty() || self.last_provider_sig != provider_sig(lyrics)
     }
 
+    /// True when the romanization setting changed since the lyrics currently
+    /// in playback were loaded, so they must be re-read from cache.
+    pub fn romanize_changed(&self, lyrics: &crate::config::LyricsSettings) -> bool {
+        self.last_romanize.is_some_and(|prev| prev != lyrics.romanize)
+    }
+
     fn cache_path(&self, title: &str, artist: &str) -> PathBuf {
         self.cache_dir
             .join(format!("{}-{}.json", sanitize_filename(title), sanitize_filename(artist)))
     }
 
-    pub fn read_cache(&self, title: &str, artist: &str) -> Option<Vec<LyricsLine>> {
+    /// Cached lyrics for a song, honoring the romanization setting: with it
+    /// enabled the stored romanized copy is served (romanized once and
+    /// persisted on first use); with it disabled the original lines are.
+    pub fn read_cache(&mut self, title: &str, artist: &str, romanize: bool) -> Option<Vec<LyricsLine>> {
+        self.last_romanize = Some(romanize);
         let raw = fs::read_to_string(self.cache_path(title, artist)).ok()?;
-        let parsed: CachedLyrics = serde_json::from_str(&raw).ok()?;
+        let mut parsed: CachedLyrics = serde_json::from_str(&raw).ok()?;
         if parsed.lines.is_empty() {
             return None;
         }
+        if romanize {
+            if parsed.romanized.is_empty() {
+                parsed.romanized = parsed
+                    .lines
+                    .iter()
+                    .map(|l| LyricsLine {
+                        time: l.time,
+                        text: crate::romanize::romanize(&l.text),
+                    })
+                    .collect();
+                self.store_romanized(title, artist, &parsed);
+            }
+            return Some(parsed.romanized);
+        }
         Some(parsed.lines)
+    }
+
+    /// Persist the romanized copy of a song's lyrics into its cache file,
+    /// keeping the original lines intact.
+    fn store_romanized(&self, title: &str, artist: &str, updated: &CachedLyrics) {
+        let _ = fs::write(
+            self.cache_path(title, artist),
+            serde_json::to_string(updated).unwrap_or_default(),
+        );
     }
 
     fn write_cache(&self, title: &str, artist: &str, source: &str, lines: &[LyricsLine]) {
@@ -335,6 +377,7 @@ impl LyricsFetcher {
         let cached = CachedLyrics {
             source: source.to_string(),
             lines: lines.to_vec(),
+            romanized: Vec::new(),
         };
         let _ = fs::write(
             self.cache_path(title, artist),
@@ -373,7 +416,7 @@ impl LyricsFetcher {
         self.last_fetched_for = format!("{title}{artist}");
         self.last_provider_sig = provider_sig(lyrics);
 
-        if let Some(cached) = self.read_cache(title, artist) {
+        if let Some(cached) = self.read_cache(title, artist, lyrics.romanize) {
             return Some((cached, "cache".to_string()));
         }
 
@@ -382,6 +425,26 @@ impl LyricsFetcher {
             match source.fetch(title, artist) {
                 Ok(lines) if !lines.is_empty() => {
                     self.write_cache(title, artist, &source.app_name(), &lines);
+                    self.last_romanize = Some(lyrics.romanize);
+                    if lyrics.romanize {
+                        let romanized: Vec<LyricsLine> = lines
+                            .iter()
+                            .map(|l| LyricsLine {
+                                time: l.time,
+                                text: crate::romanize::romanize(&l.text),
+                            })
+                            .collect();
+                        self.store_romanized(
+                            title,
+                            artist,
+                            &CachedLyrics {
+                                source: source.app_name(),
+                                lines: lines.clone(),
+                                romanized: romanized.clone(),
+                            },
+                        );
+                        return Some((romanized, source.app_name()));
+                    }
                     return Some((lines, source.app_name()));
                 }
                 _ => continue,
@@ -606,5 +669,72 @@ mod tests {
         assert_eq!(lines[0].text, "hello");
         assert_eq!(lines[1].time, 2_000);
         assert_eq!(server.join().unwrap(), "Bearer sekrit");
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+
+    fn temp_cache_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "mewsic-lyrics-cache-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
+    fn write_raw_cache(dir: &std::path::Path, title: &str, artist: &str, text: &str) {
+        let fetcher = LyricsFetcher::new(dir);
+        let lines = vec![LyricsLine {
+            time: 0,
+            text: text.to_string(),
+        }];
+        fetcher.write_cache(title, artist, "test", &lines);
+    }
+
+    #[test]
+    fn romanized_copy_is_persisted_and_served_per_setting() {
+        let dir = temp_cache_dir("romanize");
+        write_raw_cache(&dir, "Song", "Artist", "今日は");
+
+        let mut fetcher = LyricsFetcher::new(&dir);
+
+        // First read with romanization on: romanizes once, serves it and
+        // persists the romanized copy alongside the original.
+        let lines = fetcher.read_cache("Song", "Artist", true).unwrap();
+        assert_eq!(lines[0].text, "kyouha");
+        let raw = std::fs::read_to_string(dir.join("cache/Song-Artist.json")).unwrap();
+        assert!(raw.contains("kyouha"), "romanized copy must be persisted");
+        assert!(raw.contains("今日は"), "original must be kept");
+
+        // Reads with the setting off keep serving the original.
+        let lines = fetcher.read_cache("Song", "Artist", false).unwrap();
+        assert_eq!(lines[0].text, "今日は");
+
+        // And back on, the persisted romanized copy is reused as-is.
+        let lines = fetcher.read_cache("Song", "Artist", true).unwrap();
+        assert_eq!(lines[0].text, "kyouha");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn romanize_setting_change_forces_cache_reload() {
+        let dir = temp_cache_dir("toggle");
+        write_raw_cache(&dir, "Song2", "Artist", "さくら");
+        let settings = crate::config::LyricsSettings::default();
+
+        let mut fetcher = LyricsFetcher::new(&dir);
+        let _ = fetcher.read_cache("Song2", "Artist", false).unwrap();
+        assert!(!fetcher.romanize_changed(&settings));
+
+        let mut on = settings.clone();
+        on.romanize = true;
+        assert!(fetcher.romanize_changed(&on), "toggle must trigger reload");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

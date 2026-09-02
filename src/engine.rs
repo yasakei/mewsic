@@ -316,7 +316,8 @@ fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Op
 fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool) {
     let lyrics_settings = ctx.settings.read().unwrap().lyrics.clone();
 
-    if !song_changed && ctx.shared.playback.lock().unwrap().has_lyrics {
+    let romanize_changed = fetcher.romanize_changed(&lyrics_settings);
+    if !song_changed && !romanize_changed && ctx.shared.playback.lock().unwrap().has_lyrics {
         return;
     }
 
@@ -328,7 +329,7 @@ fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool
         return;
     }
 
-    if let Some(cached) = fetcher.read_cache(&name, &artist) {
+    if let Some(cached) = fetcher.read_cache(&name, &artist, lyrics_settings.romanize) {
         let mut pb = ctx.shared.playback.lock().unwrap();
         pb.lyrics = Some(cached);
         pb.has_lyrics = true;
