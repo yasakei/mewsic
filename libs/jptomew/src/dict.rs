@@ -100,7 +100,9 @@ pub(crate) trait ByteDecodable {
 impl ByteDecodable for DictKey<'_> {
     fn decode(data: &'static [u8]) -> Self {
         DictKey(std::borrow::Cow::Owned(
-            data.chunks_exact(2)
+            data.as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| {
                     let code = ((c[0] as u32) << 8) | c[1] as u32;
                     // SAFETY: the dictionary only contains valid Unicode scalar values.

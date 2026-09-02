@@ -368,7 +368,7 @@ impl Table {
     fn add_words(&mut self, words: HashMap<String, String>) {
         self.words.extend(words);
         // Longest first, so the longest match wins at a given position.
-        self.words.sort_by(|a, b| b.0.chars().count().cmp(&a.0.chars().count()));
+        self.words.sort_by_key(|(word, _)| std::cmp::Reverse(word.chars().count()));
     }
 
     /// Longest dictionary word starting at `chars[i]`, if any.

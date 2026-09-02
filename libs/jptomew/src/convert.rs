@@ -227,7 +227,9 @@ fn normalize_input(text: &str) -> String {
                 repeat_count = Some(1);
                 for &following in &chars[i + 1..] {
                     if following == REPETITION_MARK {
-                        repeat_count.as_mut().map(|n| *n += 1);
+                        if let Some(n) = repeat_count.as_mut() {
+                        *n += 1;
+                    }
                     } else {
                         break;
                     }
@@ -362,11 +364,10 @@ fn kana_to_latin(hira: &str) -> String {
 
         // ん before vowel or y → n'
         if c == 'ん' {
-            let next_is_vowel_y = chars.get(i + 1).map_or(false, |&n| {
-                single_romaji(n).map_or(false, |r| {
-                    r.starts_with(|ch: char| matches!(ch, 'a' | 'e' | 'i' | 'o' | 'u' | 'y'))
-                })
-            });
+            let next_is_vowel_y = chars
+                .get(i + 1)
+                .and_then(|&n| single_romaji(n))
+                .is_some_and(|r| r.starts_with(['a', 'e', 'i', 'o', 'u', 'y']));
             out.push_str(if next_is_vowel_y { "n'" } else { "n" });
             i += 1;
             continue;
