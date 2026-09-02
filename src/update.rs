@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use crate::state::{AppContext, UpdateState};
 
 const USER_AGENT: &str = "mewsic-updater";
-const LATEST_API: &str = "https://api.update.mewsic.yasakei.dev/latest";
+const LATEST_API: &str = "https://mewsic.yasakei.dev/v1/release/latest";
 const CHECKSUM_ASSET: &str = "checksums.txt";
 #[cfg_attr(not(windows), allow(dead_code))]
 const WINDOWS_INSTALLER_ASSET: &str = "mewsic-setup.exe";
