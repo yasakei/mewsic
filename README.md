@@ -10,7 +10,6 @@ real time. One tiny native binary, written in safe Rust.
 
 ![Release](https://img.shields.io/github/v/release/yasakei/mewsic?style=flat-square&label=release&color=f5a97f)
 ![CI](https://img.shields.io/github/actions/workflow/status/yasakei/mewsic/check.yml?branch=main&style=flat-square&label=CI&color=a6da95)
-![License](https://img.shields.io/github/license/yasakei/mewsic?style=flat-square&label=license&color=eed49f)
 ![Rust](https://img.shields.io/badge/rust-safe%20only-a6da95?style=flat-square)
 ![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-8aadf4?style=flat-square)
 ![PRs](https://img.shields.io/badge/PRs-welcome-f5bde6?style=flat-square)
