@@ -1,0 +1,7 @@
+
+[[scripts]]
+name = "my-script"
+kind = "chart"
+capitalize_first = false
+
+[scripts.letters]

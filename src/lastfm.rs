@@ -21,7 +21,9 @@ pub fn fetch_player(
         .get(&url)
         .call()
         .map_err(|e| FetchError::Other(e.to_string()))?;
-    let json: Value = resp.into_json().map_err(|e| FetchError::Other(e.to_string()))?;
+    let json: Value = resp
+        .into_json()
+        .map_err(|e| FetchError::Other(e.to_string()))?;
 
     let prev_uts = previous_scrobble_uts(&json);
     let mut state = match parse_nowplaying(&json)? {
@@ -76,10 +78,7 @@ fn parse_nowplaying(json: &Value) -> Result<Option<PlayerState>, FetchError> {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let artist = track
-        .get("artist")
-        .map(json_text)
-        .unwrap_or_default();
+    let artist = track.get("artist").map(json_text).unwrap_or_default();
     if name.is_empty() || artist.is_empty() {
         return Ok(None);
     }
@@ -109,13 +108,15 @@ fn fetch_duration_ms(api_key: &str, artist: &str, track: &str) -> Option<u64> {
     );
     let resp = net::agent().get(&url).call().ok()?;
     let json: Value = resp.into_json().ok()?;
-    let raw = json
-        .pointer("/track/duration")
-        .and_then(as_u64_value)?;
+    let raw = json.pointer("/track/duration").and_then(as_u64_value)?;
     if raw == 0 {
         return None;
     }
-    Some(if raw >= 60_000 { raw } else { raw.saturating_mul(1000) })
+    Some(if raw >= 60_000 {
+        raw
+    } else {
+        raw.saturating_mul(1000)
+    })
 }
 
 fn json_text(v: &Value) -> String {

@@ -5,10 +5,9 @@ const KEYRING_SERVICE: &str = "mewsic";
 const KEYRING_USER: &str = "discord-token";
 
 fn entry() -> Option<keyring::Entry> {
-    let service = std::env::var("MEWSIC_KEYRING_SERVICE")
-        .unwrap_or_else(|_| KEYRING_SERVICE.to_string());
-    let user = std::env::var("MEWSIC_KEYRING_USER")
-        .unwrap_or_else(|_| KEYRING_USER.to_string());
+    let service =
+        std::env::var("MEWSIC_KEYRING_SERVICE").unwrap_or_else(|_| KEYRING_SERVICE.to_string());
+    let user = std::env::var("MEWSIC_KEYRING_USER").unwrap_or_else(|_| KEYRING_USER.to_string());
     keyring::Entry::new(&service, &user).ok()
 }
 
@@ -92,8 +91,15 @@ mod tests {
         let dir = test_dir("private");
         let _ = fs::create_dir_all(&dir);
         fallback_store(&dir, "super-secret").unwrap();
-        let mode = fs::metadata(dir.join("token")).unwrap().permissions().mode();
-        assert_eq!(mode & 0o077, 0, "fallback token file must not be group/world-readable");
+        let mode = fs::metadata(dir.join("token"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o077,
+            0,
+            "fallback token file must not be group/world-readable"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

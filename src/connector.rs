@@ -32,11 +32,13 @@ pub fn fetch_spotify_token(discord_token: &str) -> Result<String, FetchError> {
             other => FetchError::Other(other.to_string()),
         })?;
 
-    let json: serde_json::Value = resp.into_json().map_err(|e| FetchError::Other(e.to_string()))?;
+    let json: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| FetchError::Other(e.to_string()))?;
 
-    let connections = json.as_array().ok_or_else(|| {
-        FetchError::Other("unexpected connections response".to_string())
-    })?;
+    let connections = json
+        .as_array()
+        .ok_or_else(|| FetchError::Other("unexpected connections response".to_string()))?;
 
     for conn in connections {
         if conn.get("type").and_then(|v| v.as_str()) == Some("spotify") {
@@ -65,7 +67,9 @@ pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchErr
         return Ok(None);
     }
 
-    let json: serde_json::Value = resp.into_json().map_err(|e| FetchError::Other(e.to_string()))?;
+    let json: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| FetchError::Other(e.to_string()))?;
     let item = json.get("item");
     if item.is_none() || item.unwrap().is_null() {
         return Ok(None);
@@ -82,11 +86,28 @@ pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchErr
         .to_string();
 
     Ok(Some(PlayerState {
-        is_playing: json.get("is_playing").and_then(|v| v.as_bool()).unwrap_or(false),
-        progress_ms: json.get("progress_ms").and_then(|v| v.as_u64()).unwrap_or(0),
-        duration_ms: item.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(0),
-        track_id: item.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        name: item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        is_playing: json
+            .get("is_playing")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        progress_ms: json
+            .get("progress_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        duration_ms: item
+            .get("duration_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        track_id: item
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        name: item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         artist,
     }))
 }

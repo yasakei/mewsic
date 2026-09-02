@@ -128,8 +128,9 @@
   section:nth-of-type(1) { grid-column: 1 / -1; background: var(--blue) !important; }
   section:nth-of-type(2) { grid-column: 1; background: var(--card) !important; }
   section:nth-of-type(3) { grid-column: 2; background: var(--mint) !important; }
-  section:nth-of-type(4) { grid-column: 1; background: var(--violet) !important; }
+  section:nth-of-type(4) { grid-column: 1; background: var(--card) !important; }
   section:nth-of-type(5) { grid-column: 2; background: var(--orange) !important; }
+  section:nth-of-type(6) { grid-column: 1 / -1; background: var(--violet) !important; }
   section > h2 { color: var(--ink) !important; opacity: .72; letter-spacing: .2em !important; border-bottom: 2px solid var(--line); padding-bottom: 10px; }
   section:nth-of-type(1) > h2 { opacity: 1; }
   section:nth-of-type(1) #npTitle { font-size: 31px; line-height: 1.05; letter-spacing: -.04em; }
@@ -322,6 +323,62 @@
   </section>
 
   <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">lyrics</h2>
+    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <span class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300">Providers</span>
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provLrclib" value="lrclib" class="h-4 w-4 accent-violet-600"> LrcLib</label>
+          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provNetease" value="netease" class="h-4 w-4 accent-violet-600"> NetEase Music</label>
+          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provQqmusic" value="qqmusic" class="h-4 w-4 accent-violet-600"> QQ Music</label>
+          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provCustom" value="custom" class="h-4 w-4 accent-violet-600"> Custom</label>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="romanize">Romanize lyrics</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="romanize" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Turns Japanese/Korean/Hindi/Bangla/Cyrillic/Greek/Arabic into Latin letters on the fly. Chinese passes through (needs a dictionary).</small>
+      </div>
+      <div id="customRow" class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+        <div class="flex flex-wrap items-center gap-3 py-3.5">
+          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customName">Provider name</label>
+          <div class="flex min-w-0 flex-1 items-center justify-end">
+            <input type="text" id="customName" placeholder="e.g. MyProvider"
+                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 py-3.5">
+          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customUrl">URL template</label>
+          <div class="flex min-w-0 flex-1 items-center justify-end">
+            <input type="text" id="customUrl" placeholder="https://…/{title}?artist={artist}"
+                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+          </div>
+          <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">{title} and {artist} are URL-quoted and substituted in. The response body is treated as LRC, unless a JSON path is given.</small>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 py-3.5">
+          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customKey">API key</label>
+          <div class="flex min-w-0 flex-1 items-center justify-end">
+            <input type="password" id="customKey" autocomplete="off" placeholder="optional — {api_key} in URL or Bearer header"
+                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 py-3.5">
+          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customPath">JSON path</label>
+          <div class="flex min-w-0 flex-1 items-center justify-end">
+            <input type="text" id="customPath" placeholder="optional, e.g. /lrc/lyric"
+                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
     <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">timing</h2>
     <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
       <div class="flex flex-wrap items-center gap-3 py-3.5">
@@ -404,8 +461,23 @@ function bindSettings() {
   $("source").value = settings.source || "spotify";
   setVal("lastfmKey", settings.lastfm ? settings.lastfm.api_key : "");
   setVal("lastfmUser", settings.lastfm ? settings.lastfm.username : "");
+
+  const lyr = settings.lyrics || {};
+  const provs = lyr.providers || ["lrclib", "netease", "qqmusic"];
+  setCheck("provLrclib", provs.includes("lrclib"));
+  setCheck("provNetease", provs.includes("netease"));
+  setCheck("provQqmusic", provs.includes("qqmusic"));
+  setCheck("provCustom", provs.includes("custom"));
+  setCheck("romanize", !!lyr.romanize);
+  const custom = lyr.custom || {};
+  setVal("customName", custom.name);
+  setVal("customUrl", custom.url);
+  setVal("customKey", custom.api_key || "");
+  setVal("customPath", custom.json_path || "");
+
   updateSourceVisibility();
   updateAdvancedVisibility();
+  updateLyricsVisibility();
   renderPreview();
 }
 
@@ -432,11 +504,30 @@ function collectSettings() {
       enable_autooffset: $("autoOffset").checked,
       autooffset: Math.max(1, +$("samples").value || 3)
     },
-    update: { auto_start: $("autoStart").checked }
+    update: { auto_start: $("autoStart").checked },
+    lyrics: {
+      providers: collectLyricsProviders(),
+      romanize: $("romanize").checked,
+      custom: $("provCustom").checked ? {
+        name: $("customName").value.trim(),
+        url: $("customUrl").value.trim(),
+        api_key: $("customKey").value.trim() || null,
+        json_path: $("customPath").value.trim() || null
+      } : null
+    }
   };
   const token = $("token").value.replace(/"/g, "").trim();
   if (token) s.token = token;
   return s;
+}
+
+function collectLyricsProviders() {
+  const ids = [];
+  if ($("provLrclib").checked) ids.push("lrclib");
+  if ($("provNetease").checked) ids.push("netease");
+  if ($("provQqmusic").checked) ids.push("qqmusic");
+  if ($("provCustom").checked) ids.push("custom");
+  return ids;
 }
 
 function updateSourceVisibility() {
@@ -447,6 +538,10 @@ function updateAdvancedVisibility() {
   const on = $("advanced").checked;
   $("advRow").style.display = on ? "flex" : "none";
   $("advTemplateRow").style.display = on ? "flex" : "none";
+}
+
+function updateLyricsVisibility() {
+  $("customRow").style.display = $("provCustom").checked ? "" : "none";
 }
 
 function fmtSeconds(s) {
@@ -555,6 +650,14 @@ async function checkToken() {
 ["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("input", () => { queueSave(); renderPreview(); });
+});
+["provLrclib","provNetease","provQqmusic","provCustom","romanize"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("change", () => { updateLyricsVisibility(); queueSave(); });
+});
+["customName","customUrl","customKey","customPath"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("input", () => queueSave());
 });
 $("source").addEventListener("change", () => { updateSourceVisibility(); queueSave(); });
 $("advTemplate").addEventListener("input", () => { queueSave(); renderPreview(); });

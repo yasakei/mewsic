@@ -9,6 +9,7 @@ mod lastfm;
 mod log;
 mod lyrics;
 mod net;
+mod romanize;
 mod state;
 mod sync;
 mod tui;
@@ -61,6 +62,7 @@ fn main() {
             println!("mewsic {}", env!("CARGO_PKG_VERSION"));
         }
         "stop" => stop(),
+        "romanize" => romanize_command(args.get(1)),
         "setup" => setup(),
         "settings" => settings(),
         "web" => run(true),
@@ -85,10 +87,15 @@ fn init_context() -> Arc<AppContext> {
         eprintln!("warning: could not create config dir {}", dir.display());
     }
     log::init(&dir);
+    romanize::init(&dir);
 
     let settings = config::Settings::load(&dir);
     let shared = Shared::new();
-    Arc::new(AppContext::new(shared, Arc::new(RwLock::new(settings)), dir))
+    Arc::new(AppContext::new(
+        shared,
+        Arc::new(RwLock::new(settings)),
+        dir,
+    ))
 }
 
 fn run(with_web: bool) {
@@ -261,7 +268,9 @@ fn background() {
     }
 
     println!("Background engine started (pid {pid}).");
-    println!("It keeps playing after this terminal closes — stop it with `mewsic kill background`.");
+    println!(
+        "It keeps playing after this terminal closes — stop it with `mewsic kill background`."
+    );
 }
 
 fn background_child() {
@@ -273,7 +282,10 @@ fn background_child() {
         std::process::exit(1);
     }
     let _pid = PidGuard::new(config::config_dir().join("background.pid"));
-    crate::log::write(&format!("background engine started (pid {})", std::process::id()));
+    crate::log::write(&format!(
+        "background engine started (pid {})",
+        std::process::id()
+    ));
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
@@ -504,6 +516,24 @@ fn apply_update_helper(staged: Option<&String>) {
     if let Err(e) = update::apply_staged_as_admin(std::path::Path::new(staged)) {
         eprintln!("{e}");
         std::process::exit(1);
+    }
+}
+
+fn romanize_command(text: Option<&String>) {
+    use std::io::Write;
+    romanize::init(&config::config_dir());
+    let print = |line: &str| {
+        let _ = writeln!(std::io::stdout(), "{}", romanize::romanize(line));
+    };
+    match text {
+        Some(t) => print(t),
+        None => {
+            use std::io::BufRead;
+            let stdin = std::io::stdin();
+            for line in stdin.lock().lines() {
+                print(&line.unwrap_or_default());
+            }
+        }
     }
 }
 

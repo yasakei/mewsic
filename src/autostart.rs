@@ -10,7 +10,9 @@ const APP_NAME: &str = "mewsic";
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default()
 }
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -99,7 +101,9 @@ fn windows_autostart(enabled: bool) -> Result<(), String> {
     }
     let value = command_for_autostart();
     Command::new("reg")
-        .args(["add", key, "/v", APP_NAME, "/t", "REG_SZ", "/d", &value, "/f"])
+        .args([
+            "add", key, "/v", APP_NAME, "/t", "REG_SZ", "/d", &value, "/f",
+        ])
         .status()
         .map_err(|e| e.to_string())?;
     Ok(())

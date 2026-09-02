@@ -59,6 +59,7 @@ pub struct Settings {
     pub view: ViewSettings,
     pub timing: TimingSettings,
     pub update: UpdateSettings,
+    pub lyrics: LyricsSettings,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -66,6 +67,51 @@ pub struct Settings {
 pub struct LastFmSettings {
     pub api_key: String,
     pub username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LyricsSettings {
+    pub providers: Vec<String>,
+    pub romanize: bool,
+    pub custom: Option<CustomProvider>,
+}
+
+impl Default for LyricsSettings {
+    fn default() -> Self {
+        LyricsSettings {
+            providers: vec![
+                "lrclib".to_string(),
+                "netease".to_string(),
+                "qqmusic".to_string(),
+            ],
+            romanize: false,
+            custom: None,
+        }
+    }
+}
+
+impl LyricsSettings {
+    pub const BUILTIN: &'static [&'static str] = &["lrclib", "netease", "qqmusic"];
+
+    pub fn provider_label(id: &str) -> &'static str {
+        match id {
+            "lrclib" => "LrcLib",
+            "netease" => "NetEase Music",
+            "qqmusic" => "QQ Music",
+            "custom" => "Custom",
+            _ => "Unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CustomProvider {
+    pub name: String,
+    pub url: String,
+    pub api_key: Option<String>,
+    pub json_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,10 +264,7 @@ fn read_legacy_json(path: &Path) -> Option<Settings> {
 
     let mut settings = Settings::default();
 
-    if let Some(token) = json
-        .pointer("/credentials/token")
-        .and_then(|v| v.as_str())
-    {
+    if let Some(token) = json.pointer("/credentials/token").and_then(|v| v.as_str()) {
         settings.token = token.to_string();
     }
     if let Some(view) = json.get("view") {
@@ -314,13 +357,58 @@ mod tests {
     }
 
     #[test]
+    fn lyrics_defaults_to_all_builtins() {
+        let s = Settings::default();
+        assert_eq!(s.lyrics.providers, vec!["lrclib", "netease", "qqmusic"]);
+        assert!(s.lyrics.custom.is_none());
+    }
+
+    #[test]
+    fn lyrics_serde_roundtrip_keeps_custom_provider() {
+        let mut s = Settings::default();
+        s.lyrics.providers = vec!["lrclib".into(), "custom".into()];
+        s.lyrics.custom = Some(CustomProvider {
+            name: "Provider".into(),
+            url: "https://example.com/{title}/{artist}".into(),
+            api_key: Some("sekrit".into()),
+            json_path: Some("/lrc/lyric".into()),
+        });
+        let raw = toml::to_string(&s).unwrap();
+        let back: Settings = toml::from_str(&raw).unwrap();
+        assert_eq!(back.lyrics.providers, vec!["lrclib", "custom"]);
+        let c = back.lyrics.custom.unwrap();
+        assert_eq!(c.name, "Provider");
+        assert_eq!(c.api_key.as_deref(), Some("sekrit"));
+        assert_eq!(c.json_path.as_deref(), Some("/lrc/lyric"));
+    }
+
+    #[test]
+    fn custom_provider_accepts_legacy_config_without_api_key() {
+        let raw = r#"
+            [lyrics]
+            providers = ["custom"]
+            [lyrics.custom]
+            name = "Old"
+            url = "https://example.com/{title}"
+            json_path = "/lyrics"
+        "#;
+        let s: Settings = toml::from_str(raw).unwrap();
+        assert_eq!(s.lyrics.custom.as_ref().unwrap().api_key, None);
+        assert_eq!(s.lyrics.custom.as_ref().unwrap().name, "Old");
+    }
+
+    #[test]
     fn legacy_settings_have_no_source() {
         let _guard = KEYRING_ENV_LOCK.lock().unwrap();
         std::env::set_var("MEWSIC_KEYRING_SERVICE", "mewsic-legacy-test");
         std::env::set_var("MEWSIC_KEYRING_USER", "legacy-user");
         let dir = std::env::temp_dir().join(format!("mewsic-test-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
-        fs::write(dir.join("settings.json"), r#"{"credentials":{"token":"t"}}"#).unwrap();
+        fs::write(
+            dir.join("settings.json"),
+            r#"{"credentials":{"token":"t"}}"#,
+        )
+        .unwrap();
         let s = Settings::load(&dir);
         assert_eq!(s.source, Source::Spotify);
         assert_eq!(s.token, "t");
@@ -352,7 +440,11 @@ mod tests {
 
         let cleared = Settings::default();
         cleared.save(&dir).unwrap();
-        assert_eq!(Settings::load(&dir).token, "", "clearing must drop the credential");
+        assert_eq!(
+            Settings::load(&dir).token,
+            "",
+            "clearing must drop the credential"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
