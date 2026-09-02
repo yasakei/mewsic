@@ -91,7 +91,11 @@ fn init_context() -> Arc<AppContext> {
 
     let settings = config::Settings::load(&dir);
     let shared = Shared::new();
-    Arc::new(AppContext::new(shared, Arc::new(RwLock::new(settings)), dir))
+    Arc::new(AppContext::new(
+        shared,
+        Arc::new(RwLock::new(settings)),
+        dir,
+    ))
 }
 
 fn run(with_web: bool) {
@@ -264,7 +268,9 @@ fn background() {
     }
 
     println!("Background engine started (pid {pid}).");
-    println!("It keeps playing after this terminal closes — stop it with `mewsic kill background`.");
+    println!(
+        "It keeps playing after this terminal closes — stop it with `mewsic kill background`."
+    );
 }
 
 fn background_child() {
@@ -276,7 +282,10 @@ fn background_child() {
         std::process::exit(1);
     }
     let _pid = PidGuard::new(config::config_dir().join("background.pid"));
-    crate::log::write(&format!("background engine started (pid {})", std::process::id()));
+    crate::log::write(&format!(
+        "background engine started (pid {})",
+        std::process::id()
+    ));
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
@@ -510,14 +519,10 @@ fn apply_update_helper(staged: Option<&String>) {
     }
 }
 
-/// Diagnostic: romanize text given as an argument or on stdin, line by line.
-/// Lets a user verify the running binary contains the current romanizer:
-/// `mewsic romanize "君の中にある 赤と青き線"` or `mewsic romanize < lyrics.txt`.
 fn romanize_command(text: Option<&String>) {
     use std::io::Write;
     romanize::init(&config::config_dir());
     let print = |line: &str| {
-        // Ignore broken pipes so `mewsic romanize ... | head` stays quiet.
         let _ = writeln!(std::io::stdout(), "{}", romanize::romanize(line));
     };
     match text {

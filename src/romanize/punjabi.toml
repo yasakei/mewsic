@@ -1,13 +1,3 @@
-# Gurmukhi (Punjabi) abugida, romanized the way Punjabi lyrics are usually
-# written in Latin script: no vowel-length distinction (ਆ/ਾ -> "a",
-# ਈ/ੀ -> "i"), ਵ -> "v", tippi/bindi as n or silent.
-#
-# Word-final inherent vowels are kept only after ਰ/ੜ following a plain CV
-# syllable (ਘਰ -> "ghar", ਸ਼ਹਿਰ -> "shehar") and dropped elsewhere
-# (ਦਿਲ -> "dil", ਪੰਜਾਬ -> "panjab").
-#
-# The adhak (ੱ) doubles the next consonant's first letter:
-# ਕੱਕਾ -> "kakka", ਪੱਖੀ -> "pakkhi", ਸੱਚਾ -> "saccha".
 
 [[scripts]]
 name = "punjabi"

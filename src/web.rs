@@ -172,33 +172,33 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
             json_response(value.to_string())
         }
 
-        ("POST", "/api/settings") => {
-            match serde_json::from_slice::<Settings>(body) {
-                Ok(mut new_settings) => {
-                    if let Ok(raw) = serde_json::from_slice::<serde_json::Value>(body) {
-                        match raw.get("token") {
-                            Some(serde_json::Value::String(t)) => new_settings.token = t.clone(),
-                            _ => {
-                                new_settings.token = ctx.settings.read().unwrap().token.clone();
-                            }
+        ("POST", "/api/settings") => match serde_json::from_slice::<Settings>(body) {
+            Ok(mut new_settings) => {
+                if let Ok(raw) = serde_json::from_slice::<serde_json::Value>(body) {
+                    match raw.get("token") {
+                        Some(serde_json::Value::String(t)) => new_settings.token = t.clone(),
+                        _ => {
+                            new_settings.token = ctx.settings.read().unwrap().token.clone();
                         }
                     }
-                    {
-                        let mut settings = ctx.settings.write().unwrap();
-                        *settings = new_settings.clone();
-                    }
-                    let _ = new_settings.save(&ctx.config_dir);
-                    crate::autostart::apply(new_settings.update.auto_start);
-                    json_response(json!({"ok": true}).to_string())
                 }
-                Err(e) => Response {
-                    status: 400,
-                    reason: "Bad Request",
-                    content_type: "application/json; charset=utf-8",
-                    body: json!({"ok": false, "error": e.to_string()}).to_string().into_bytes(),
-                },
+                {
+                    let mut settings = ctx.settings.write().unwrap();
+                    *settings = new_settings.clone();
+                }
+                let _ = new_settings.save(&ctx.config_dir);
+                crate::autostart::apply(new_settings.update.auto_start);
+                json_response(json!({"ok": true}).to_string())
             }
-        }
+            Err(e) => Response {
+                status: 400,
+                reason: "Bad Request",
+                content_type: "application/json; charset=utf-8",
+                body: json!({"ok": false, "error": e.to_string()})
+                    .to_string()
+                    .into_bytes(),
+            },
+        },
 
         ("POST", "/api/validate") => {
             let token = serde_json::from_slice::<serde_json::Value>(body)

@@ -52,12 +52,9 @@ impl Source for NetEaseSource {
     fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String> {
         let song_id = self.song_id(title, artist)?;
 
-        let url = format!(
-            "https://music.163.com/api/song/lyric?tv=-1&kv=-1&lv=-1&os=pc&id={song_id}"
-        );
-        let resp = self
-            .post(&url)
-            .map_err(|e| e.to_string())?;
+        let url =
+            format!("https://music.163.com/api/song/lyric?tv=-1&kv=-1&lv=-1&os=pc&id={song_id}");
+        let resp = self.post(&url).map_err(|e| e.to_string())?;
         let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
 
         let lyric = json
@@ -123,10 +120,7 @@ impl Source for QqMusicSource {
             .map_err(|e| e.to_string())?;
         let json: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
 
-        let b64 = json
-            .get("lyric")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let b64 = json.get("lyric").and_then(|v| v.as_str()).unwrap_or("");
         if b64.trim().is_empty() {
             return Err("no lyric in response".into());
         }
@@ -163,8 +157,6 @@ impl QqMusicSource {
     }
 }
 
-/// A user-defined lyrics provider backed by a URL template and an optional
-/// JSON pointer used to locate the raw LRC text inside a JSON response.
 pub struct CustomSource {
     config: crate::config::CustomProvider,
 }
@@ -288,9 +280,7 @@ fn parse_time(tag: &str) -> Option<u64> {
 struct CachedLyrics {
     source: String,
     lines: Vec<LyricsLine>,
-    /// The same lines with `lyrics.romanize` applied, filled in the first
-    /// time the song is loaded with romanization enabled. Older cache files
-    /// lack the field and deserialize to an empty vec.
+
     #[serde(default)]
     romanized: Vec<LyricsLine>,
 }
@@ -299,8 +289,7 @@ pub struct LyricsFetcher {
     cache_dir: PathBuf,
     last_fetched_for: String,
     last_provider_sig: String,
-    /// Romanization flag the current cache read/fetch was made with, so a
-    /// setting change triggers a reload from cache.
+
     last_romanize: Option<bool>,
 }
 
@@ -318,28 +307,29 @@ impl LyricsFetcher {
         &self.last_fetched_for
     }
 
-    /// True when the configured provider set differs from the last fetch
-    /// attempt, so a same-song retry must not be skipped by the anti-hammer
-    /// guard (e.g. the user just toggled a provider back on).
     pub fn providers_changed(&self, lyrics: &crate::config::LyricsSettings) -> bool {
         self.last_fetched_for.is_empty() || self.last_provider_sig != provider_sig(lyrics)
     }
 
-    /// True when the romanization setting changed since the lyrics currently
-    /// in playback were loaded, so they must be re-read from cache.
     pub fn romanize_changed(&self, lyrics: &crate::config::LyricsSettings) -> bool {
-        self.last_romanize.is_some_and(|prev| prev != lyrics.romanize)
+        self.last_romanize
+            .is_some_and(|prev| prev != lyrics.romanize)
     }
 
     fn cache_path(&self, title: &str, artist: &str) -> PathBuf {
-        self.cache_dir
-            .join(format!("{}-{}.json", sanitize_filename(title), sanitize_filename(artist)))
+        self.cache_dir.join(format!(
+            "{}-{}.json",
+            sanitize_filename(title),
+            sanitize_filename(artist)
+        ))
     }
 
-    /// Cached lyrics for a song, honoring the romanization setting: with it
-    /// enabled the stored romanized copy is served (romanized once and
-    /// persisted on first use); with it disabled the original lines are.
-    pub fn read_cache(&mut self, title: &str, artist: &str, romanize: bool) -> Option<Vec<LyricsLine>> {
+    pub fn read_cache(
+        &mut self,
+        title: &str,
+        artist: &str,
+        romanize: bool,
+    ) -> Option<Vec<LyricsLine>> {
         self.last_romanize = Some(romanize);
         let raw = fs::read_to_string(self.cache_path(title, artist)).ok()?;
         let mut parsed: CachedLyrics = serde_json::from_str(&raw).ok()?;
@@ -363,8 +353,6 @@ impl LyricsFetcher {
         Some(parsed.lines)
     }
 
-    /// Persist the romanized copy of a song's lyrics into its cache file,
-    /// keeping the original lines intact.
     fn store_romanized(&self, title: &str, artist: &str, updated: &CachedLyrics) {
         let _ = fs::write(
             self.cache_path(title, artist),
@@ -385,8 +373,6 @@ impl LyricsFetcher {
         );
     }
 
-    /// Build the ordered list of sources requested by `lyrics`, excluding any
-    /// provider that is toggled off (and a custom provider with no URL).
     fn enabled_sources(&self, lyrics: &crate::config::LyricsSettings) -> Vec<Box<dyn Source>> {
         let mut out: Vec<Box<dyn Source>> = Vec::new();
         for id in &lyrics.providers {
@@ -455,9 +441,6 @@ impl LyricsFetcher {
     }
 }
 
-/// A signature of what a fetch would produce: the provider ids plus the custom
-/// provider's url/api key/json path. Used to detect provider changes so the
-/// same song gets refetched instead of being skipped by the anti-hammer guard.
 fn provider_sig(lyrics: &crate::config::LyricsSettings) -> String {
     let custom = lyrics
         .custom
@@ -575,7 +558,6 @@ mod tests {
         use crate::config::LyricsSettings;
         let mut fetcher = LyricsFetcher::new(std::path::Path::new("/nonexistent"));
 
-        // Nothing fetched yet -> differs, so a retry is allowed.
         assert!(fetcher.providers_changed(&LyricsSettings::default()));
 
         fetcher.last_fetched_for = "songartist".to_string();
@@ -586,10 +568,9 @@ mod tests {
             custom: None,
         };
         fetcher.last_provider_sig = provider_sig(&lyrics);
-        // Same song + same providers -> the anti-hammer guard can skip.
+
         assert!(!fetcher.providers_changed(&lyrics));
 
-        // Toggling a provider (or editing the custom one) invalidates the guard.
         lyrics.providers = vec!["netease".into()];
         assert!(fetcher.providers_changed(&lyrics));
 
@@ -677,10 +658,8 @@ mod cache_tests {
     use super::*;
 
     fn temp_cache_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "mewsic-lyrics-cache-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("mewsic-lyrics-cache-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         dir
@@ -702,19 +681,15 @@ mod cache_tests {
 
         let mut fetcher = LyricsFetcher::new(&dir);
 
-        // First read with romanization on: romanizes once, serves it and
-        // persists the romanized copy alongside the original.
         let lines = fetcher.read_cache("Song", "Artist", true).unwrap();
         assert_eq!(lines[0].text, "kyouha");
         let raw = std::fs::read_to_string(dir.join("cache/Song-Artist.json")).unwrap();
         assert!(raw.contains("kyouha"), "romanized copy must be persisted");
         assert!(raw.contains("今日は"), "original must be kept");
 
-        // Reads with the setting off keep serving the original.
         let lines = fetcher.read_cache("Song", "Artist", false).unwrap();
         assert_eq!(lines[0].text, "今日は");
 
-        // And back on, the persisted romanized copy is reused as-is.
         let lines = fetcher.read_cache("Song", "Artist", true).unwrap();
         assert_eq!(lines[0].text, "kyouha");
 

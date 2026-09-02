@@ -128,9 +128,7 @@ fn expected_sha256(checksums: &str, asset: &str) -> Option<String> {
     checksums.lines().find_map(|line| {
         let mut it = line.split_whitespace();
         match (it.next(), it.next()) {
-            (Some(hash), Some(name)) if name == asset => {
-                Some(hash.trim().to_ascii_lowercase())
-            }
+            (Some(hash), Some(name)) if name == asset => Some(hash.trim().to_ascii_lowercase()),
             _ => None,
         }
     })
@@ -189,11 +187,11 @@ fn install_in_place(exe: &Path, staged: &Path) -> Result<(), String> {
     ));
 
     let probe = dir.join(".mewsic-update-probe");
-    std::fs::write(&probe, b"")
-        .map_err(|e| format!("install directory is not writable ({e})"))?;
+    std::fs::write(&probe, b"").map_err(|e| format!("install directory is not writable ({e})"))?;
     let _ = std::fs::remove_file(&probe);
 
-    std::fs::rename(exe, &old).map_err(|e| format!("could not move the current binary aside: {e}"))?;
+    std::fs::rename(exe, &old)
+        .map_err(|e| format!("could not move the current binary aside: {e}"))?;
     if let Err(e) = std::fs::copy(staged, exe) {
         let _ = std::fs::rename(&old, exe);
         return Err(format!("could not copy the update into place: {e}"));
@@ -223,9 +221,8 @@ fn fallback_install(
                 .map_err(|e| format!("bad checksums.txt: {e}"))?,
             None => return Err("release is missing checksums.txt".to_string()),
         };
-        let expected = expected_sha256(&checksums, WINDOWS_INSTALLER_ASSET).ok_or_else(|| {
-            format!("no checksum for {WINDOWS_INSTALLER_ASSET} in checksums.txt")
-        })?;
+        let expected = expected_sha256(&checksums, WINDOWS_INSTALLER_ASSET)
+            .ok_or_else(|| format!("no checksum for {WINDOWS_INSTALLER_ASSET} in checksums.txt"))?;
         let asset = release
             .asset(WINDOWS_INSTALLER_ASSET)
             .ok_or_else(|| format!("release has no {WINDOWS_INSTALLER_ASSET} asset"))?;
@@ -433,8 +430,7 @@ mod tests {
 
     #[test]
     fn checksum_manifest_lookup() {
-        let manifest =
-            "abc123  mewsic-x86_64-unknown-linux-gnu\ndef456  mewsic-setup.exe\n";
+        let manifest = "abc123  mewsic-x86_64-unknown-linux-gnu\ndef456  mewsic-setup.exe\n";
         assert_eq!(
             expected_sha256(manifest, "mewsic-x86_64-unknown-linux-gnu"),
             Some("abc123".into())
@@ -477,8 +473,7 @@ mod tests {
 
     #[test]
     fn install_in_place_swaps_the_binary() {
-        let dir =
-            std::env::temp_dir().join(format!("mewsic-update-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("mewsic-update-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let exe = dir.join("mewsic");
         let staged = dir.join("mewsic-staged");

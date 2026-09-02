@@ -1,36 +1,12 @@
-//! Client-side latinization ("romanization") of lyric lines.
-//!
-//! The providers mewsic talks to (LrcLib, NetEase, QQ Music) don't expose
-//! romanized lyrics through the endpoints used here, so this module
-//! transliterates locally instead.
-//!
-//! All the letter-to-Latin tables live in the `romanize/` directory — one TOML
-//! file per script, named after it (`cyrillic.toml`, `bengali.toml`, ...),
-//! plus a `template.toml` to copy for new scripts. `build.rs` embeds every
-//! `*.toml` in that folder at compile time, and a user's
-//! `~/.config/mewsic/romanize/` directory (same layout) is scanned on every
-//! launch and overlaid on the built-in files by name — so mapping fixes can be
-//! tested live without a rebuild. The algorithmic scripts — Japanese kana
-//! (yōon, gemination) and Korean Hangul (Jamo decomposition) — and the written
-//! forms Chinese hanzi (which need a dictionary) pass through unchanged.
-
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 use serde::Deserialize;
 
-/// Transliterate `text` into Latin characters where a mapping exists.
-///
-/// Japanese: whole-word kanji readings come from the word dictionary (TOML);
-/// all remaining kanji+kana runs are romanized by the `jptomew` library.
-/// Other scripts (Cyrillic, Greek, Arabic, Indic, Hangul) use the
-/// TOML-based letter tables.
 pub fn romanize(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
-    // A line with kanji but no kana at all is probably Chinese; jptomew's
-    // kanji dictionary would misread it as Japanese, so leave ideographs
-    // untouched unless the line also carries kana.
+
     let has_kana = chars.iter().any(|&c| is_kana(c));
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
@@ -44,7 +20,6 @@ pub fn romanize(text: &str) -> String {
 
         let table = table();
 
-        // Whole-word kanji readings from the word dictionary (longest match wins).
         if is_cjk(c) {
             if let Some((word, romaji)) = table.word_at(&chars, i) {
                 out.push_str(romaji);
@@ -53,15 +28,13 @@ pub fn romanize(text: &str) -> String {
             }
         }
 
-        // Everything else Japanese — unmatched kanji mixed with kana — is
-        // delegated to jptomew in one run, so its dictionary can resolve
-        // compounds against the kana that follows them.
         if has_kana && is_japanese(c) {
             let start = i;
             while i < chars.len() && is_japanese(chars[i]) {
                 i += 1;
             }
-            let segment: &str = &text[chars_to_byte_offset(text, start)..chars_to_byte_offset(text, i)];
+            let segment: &str =
+                &text[chars_to_byte_offset(text, start)..chars_to_byte_offset(text, i)];
             out.push_str(&jptomew::transliterate(segment).romaji);
             continue;
         }
@@ -91,40 +64,28 @@ pub fn romanize(text: &str) -> String {
     out
 }
 
-/// Check if a character is hiragana or katakana (incl. iteration marks).
 fn is_kana(c: char) -> bool {
     let code = c as u32;
     matches!(code, 0x3041..=0x3096 | 0x309D..=0x309F | 0x30A1..=0x30FE)
 }
 
-/// Check if a character is a CJK ideograph.
 fn is_cjk(c: char) -> bool {
     let code = c as u32;
     (0x4E00..=0x9FFF).contains(&code) || (0x3400..=0x4DBF).contains(&code)
 }
 
-/// Check if a character belongs to a Japanese run: kana, kanji, or the
-/// kanji-adjacent marks (々 repetition, 〆, 〇) that jptomew handles.
 fn is_japanese(c: char) -> bool {
     is_kana(c) || is_cjk(c) || matches!(c, '々' | '〆' | '〇')
 }
 
-/// Convert a char index to a byte offset in the original string.
 fn chars_to_byte_offset(s: &str, char_idx: usize) -> usize {
     s.char_indices().nth(char_idx).map_or(s.len(), |(b, _)| b)
 }
-
-// ---------------------------------------------------------------------------
-// Table loading: the compiled-in `romanize/*.toml` files (embedded by build.rs)
-// merged with the user's optional `$config_dir/romanize/` directory (same
-// layout — one file per script; files with a matching name overlay the
-// built-in maps and scalars).
 
 static TABLE: std::sync::OnceLock<Table> = std::sync::OnceLock::new();
 
 include!(concat!(env!("OUT_DIR"), "/romanize_index.rs"));
 
-/// Load the table (built-in + user overrides) at startup.
 pub fn init(config_dir: &Path) {
     let _ = TABLE.set(Table::load(config_dir));
 }
@@ -133,7 +94,6 @@ fn table() -> &'static Table {
     TABLE.get_or_init(Table::builtin)
 }
 
-/// A single-char-to-romaji script (Cyrillic, Greek, Arabic, ...).
 #[derive(Debug)]
 struct Chart {
     name: String,
@@ -145,13 +105,11 @@ struct Chart {
 enum Dialect {
     Hindi,
     Bengali,
-    /// Keeps word-final inherent vowels (Gurmukhi): ਘਰ -> "ghar".
+
     Punjabi,
     Plain,
 }
 
-/// An Indic-style abugida: consonants carry an inherent vowel, matras replace
-/// it, and the halant removes it for conjuncts.
 #[derive(Debug)]
 struct Abugida {
     name: String,
@@ -164,7 +122,7 @@ struct Abugida {
     candrabindu: char,
     visarga: char,
     nukta: Option<char>,
-    /// Gemination mark (Gurmukhi adhak ੱ): doubles the next consonant.
+
     gemination: char,
     inherent: String,
     labials: Vec<char>,
@@ -172,10 +130,10 @@ struct Abugida {
     consonants: HashMap<char, String>,
     vowels: HashMap<char, String>,
     matras: HashMap<char, String>,
-    /// Key is the full written conjunct, e.g. "জ্ঞ" (c1 + halant + c2).
+
     conjuncts: HashMap<String, String>,
     nukta_forms: HashMap<char, char>,
-    /// Consonant romanization when it is a conjunct member (Bengali স -> s).
+
     conjunct_letters: HashMap<char, String>,
 }
 
@@ -183,8 +141,7 @@ struct Abugida {
 pub struct Table {
     charts: Vec<Chart>,
     abugidas: Vec<Abugida>,
-    /// Whole-word readings (kanji like 今日 -> kyou), longest first so the
-    /// longest match wins.
+
     words: Vec<(String, String)>,
 }
 
@@ -194,7 +151,6 @@ struct RawTable {
     scripts: Vec<RawScript>,
 }
 
-// One of the two shapes is much larger; that's expected for this schema.
 #[allow(clippy::large_enum_variant)]
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -206,8 +162,7 @@ enum RawScript {
         #[serde(default)]
         letters: HashMap<char, String>,
     },
-    /// A whole-word dictionary, e.g. kanji words whose readings can't be
-    /// derived from single letters (今日 -> kyou).
+
     Words {
         #[serde(rename = "name")]
         _name: String,
@@ -252,7 +207,6 @@ enum RawScript {
 }
 
 impl Table {
-    /// Load the compiled-in `romanize/*.toml` files (generated index by build.rs).
     fn builtin() -> Table {
         let mut tables: Vec<Table> = Vec::new();
         for (name, raw) in romanize_data() {
@@ -268,8 +222,6 @@ impl Table {
         merged
     }
 
-    /// Compiled-in tables, overlaid by the user's `romanize/` directory (scanned
-    /// on every launch so edits and new script files apply without a rebuild).
     pub fn load(config_dir: &Path) -> Table {
         let mut table = Self::builtin();
         let dir = config_dir.join("romanize");
@@ -285,9 +237,7 @@ impl Table {
                 if let Ok(raw) = fs::read_to_string(&path) {
                     match Table::parse(&raw) {
                         Ok(user) => table.merge(user),
-                        Err(e) => {
-                            crate::log::write(&format!("ignoring {}: {e}", path.display()))
-                        }
+                        Err(e) => crate::log::write(&format!("ignoring {}: {e}", path.display())),
                     }
                 }
             }
@@ -367,24 +317,19 @@ impl Table {
 
     fn add_words(&mut self, words: HashMap<String, String>) {
         self.words.extend(words);
-        // Longest first, so the longest match wins at a given position.
-        self.words.sort_by_key(|(word, _)| std::cmp::Reverse(word.chars().count()));
+
+        self.words
+            .sort_by_key(|(word, _)| std::cmp::Reverse(word.chars().count()));
     }
 
-    /// Longest dictionary word starting at `chars[i]`, if any.
     fn word_at(&self, chars: &[char], i: usize) -> Option<&(String, String)> {
         if self.words.is_empty() {
             return None;
         }
         let tail: String = chars[i..].iter().take(12).collect();
-        self.words
-            .iter()
-            .find(|(word, _)| tail.starts_with(word))
+        self.words.iter().find(|(word, _)| tail.starts_with(word))
     }
 
-    /// Overlay user scripts onto the built-in ones, matched by name. Maps are
-    /// extended (user entries win), scalars are replaced when the user
-    /// provided them.
     fn merge(&mut self, mut user: Table) {
         for chart in user.charts.drain(..) {
             match self.charts.iter_mut().find(|c| c.name == chart.name) {
@@ -474,9 +419,6 @@ impl Abugida {
             .map(|i| char::from(b'0' + i as u8))
     }
 
-    /// Anusvara/candrabindu pronunciation depends on the next onset: "m"
-    /// before labials, and in the Bengali dialect "ng" before any other
-    /// consonant (বাংলা -> baanglaa).
     fn nasal(&self, next_onset: char, candrabindu: bool) -> &'static str {
         if next_onset != '\0' && self.labials.contains(&next_onset) {
             return "m";
@@ -485,8 +427,6 @@ impl Abugida {
             return "n";
         }
         match self.dialect {
-            // Word-final nasals are silent in romanized Punjabi
-            // (ਮੈਨੂੰ -> "mainu"); before a consonant they stay.
             Dialect::Punjabi if next_onset == '\0' => "",
             Dialect::Bengali if next_onset != '\0' => "ng",
             _ => "n",
@@ -539,8 +479,6 @@ impl Abugida {
     }
 }
 
-
-
 const CHOSEONG: [&str; 19] = [
     "g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p",
     "h",
@@ -554,8 +492,6 @@ const JONGSEONG: [&str; 28] = [
     "t", "t", "ng", "t", "t", "t", "t", "t", "t",
 ];
 
-/// Decompose a Hangul syllable block (U+AC00..U+D7A3) into Revised
-/// Romanization.
 fn hangul_syllable(c: char) -> Option<String> {
     let code = c as u32;
     if !(0xAC00..=0xD7A3).contains(&code) {
@@ -571,21 +507,12 @@ fn hangul_syllable(c: char) -> Option<String> {
     ))
 }
 
-// --- Indic abugidas (Devanagari, Bengali, ...) --------------------------
-//
-// An abugida is parsed letter-by-letter into syllables: each consonant starts
-// a syllable with the script's inherent vowel; a matra replaces it, the halant
-// removes it (conjunct member), anusvara/candrabindu nasalize it, and the
-// visarga appends "h". Word-final inherent-vowel handling and nasal sounds
-// follow the script's `dialect`.
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Vowel {
-    /// No vowel sign written (carries the script's inherent vowel).
     Inherent,
-    /// Halant: vowel removed, the consonant is a conjunct member.
+
     None,
-    /// Explicit vowel sign (matra or an independent vowel).
+
     Written(String),
 }
 
@@ -593,17 +520,16 @@ enum Vowel {
 struct Syl {
     onset: char,
     vowel: Vowel,
-    /// Anusvara (ं/ং) nasalizes the syllable.
+
     nasal: bool,
-    /// Candrabindu (ँ/ঁ): a plain nasal, distinct from the anusvara.
+
     candrabindu: bool,
     visarga: bool,
-    /// Special conjunct pronunciation (স্ব -> "sh"), replaces the onset.
+
     special: Option<String>,
-    /// True when this syllable's onset is covered by the previous syllable's
-    /// `special` conjunct sound (ব in the স্ব conjunct).
+
     onset_covered: bool,
-    /// Adhak preceded this syllable's consonant: its romaji is doubled.
+
     geminated: bool,
 }
 
@@ -695,13 +621,9 @@ fn romanize_indic(chars: &[char], ab: &Abugida) -> String {
             continue;
         }
         if ab.consonant(c).is_some() {
-            // Special conjuncts (স্ব -> "sh") replace both letters' onsets;
-            // the second letter's vowel still belongs to the sound.
             let mut onset_covered = false;
             if let Some(last) = syls.last_mut() {
-                if last.onset != '\0'
-                    && matches!(last.vowel, Vowel::None)
-                    && last.special.is_none()
+                if last.onset != '\0' && matches!(last.vowel, Vowel::None) && last.special.is_none()
                 {
                     if let Some(romaji) = ab.conjunct(last.onset, c) {
                         last.special = Some(romaji.to_string());
@@ -734,7 +656,7 @@ fn romanize_indic(chars: &[char], ab: &Abugida) -> String {
             });
             continue;
         }
-        // Anything else in the block: emit as-is on its own.
+
         syls.push(Syl {
             onset: c,
             vowel: Vowel::Written(String::new()),
@@ -747,18 +669,12 @@ fn romanize_indic(chars: &[char], ab: &Abugida) -> String {
         });
     }
 
-    // Word-final inherent vowel drops (in words of ≥2 syllables), except
-    // after a conjunct: Bengali keeps it (শব্দ -> shobdo), Hindi only when
-    // the conjunct ends in the semivowels y/v/r (सत्य -> satya, कर्म -> karm).
     if syls.len() >= 2 {
         let last_idx = syls.len() - 1;
         let conjunct_prev = matches!(syls[last_idx - 1].vowel, Vowel::None);
         let last = &mut syls[last_idx];
         if matches!(last.vowel, Vowel::Inherent) {
             let keep = match ab.dialect {
-                // Gurmukhi romanizes like Hindi here: only the last
-                // syllable's inherent vowel drops (ਘਰ -> "ghar",
-                // ਪੰਜਾਬ -> "panjab", ਮਰਨ -> "maran").
                 Dialect::Punjabi => false,
                 Dialect::Bengali => conjunct_prev,
                 Dialect::Hindi => conjunct_prev && matches!(last.onset, 'य' | 'व' | 'र'),
@@ -776,8 +692,6 @@ fn romanize_indic(chars: &[char], ab: &Abugida) -> String {
         if let Some(sp) = &syl.special {
             out.push_str(sp);
         } else if !syl.onset_covered && syl.onset != '\0' {
-            // Some consonants sound different inside a conjunct (Bengali স
-            // alone is "sh" but "s" in স্ত).
             let romaji = if matches!(syl.vowel, Vowel::None) {
                 ab.conjunct_letters
                     .get(&syl.onset)
@@ -788,13 +702,11 @@ fn romanize_indic(chars: &[char], ab: &Abugida) -> String {
             };
             if let Some(romaji) = romaji {
                 if syl.geminated {
-                    // Adhak: double the consonant's first letter
-                    // (ਕੱਕਾ -> "kakka", ਪੱਖੀ -> "pakkhi").
                     out.push(romaji.chars().next().unwrap_or('\0'));
                 }
                 out.push_str(romaji);
             } else {
-                out.push(syl.onset); // digits and anything unhandled
+                out.push(syl.onset);
             }
         }
         if syl.vowel == Vowel::Inherent {
@@ -802,8 +714,7 @@ fn romanize_indic(chars: &[char], ab: &Abugida) -> String {
         } else if let Vowel::Written(ref m) = syl.vowel {
             out.push_str(m);
         }
-        // Candrabindu (ঁ) is silent in banglish-style romanization; only the
-        // anusvara renders as a nasal.
+
         if !syl.candrabindu && syl.nasal {
             out.push_str(ab.nasal(next_onset, false));
         }
@@ -891,7 +802,10 @@ mod tests {
         assert_eq!(romanize("हिंदी"), "hindii");
         assert_eq!(romanize("अच्छा"), "achchhaa");
         assert_eq!(romanize("कैसे हो"), "kaise ho");
-        assert_eq!(romanize("मैं तुमसे प्यार करता हूँ"), "main tumase pyaar karataa huu");
+        assert_eq!(
+            romanize("मैं तुमसे प्यार करता हूँ"),
+            "main tumase pyaar karataa huu"
+        );
     }
 
     #[test]
@@ -908,8 +822,6 @@ mod tests {
 
     #[test]
     fn bengali_words() {
-        // Banglish conventions: no vowel-length distinction (আ/া -> "a",
-        // ঈ/ী -> "i", ঊ/ূ -> "u"), য -> "j", inherent vowel -> "o".
         assert_eq!(romanize("বাংলা"), "bangla");
         assert_eq!(romanize("ধন্যবাদ"), "dhonnobad");
         assert_eq!(romanize("ভালোবাসা"), "bhalobasa");
@@ -933,22 +845,21 @@ mod tests {
 
     #[test]
     fn punjabi_words() {
-        // Banglish-style: no vowel-length distinction (ਆ/ਾ -> "a").
         assert_eq!(romanize("ਤੇਰੀ"), "teri");
         assert_eq!(romanize("ਮੇਰਾ"), "mera");
         assert_eq!(romanize("ਦਿਲ"), "dil");
         assert_eq!(romanize("ਮੈਨੂੰ"), "mainu");
         assert_eq!(romanize("ਪੰਜਾਬ"), "panjab");
         assert_eq!(romanize("ਹੋਰ"), "hor");
-        // Final inherent vowel kept after ਰ in a plain CV syllable.
+
         assert_eq!(romanize("ਘਰ"), "ghar");
         assert_eq!(romanize("ਕਰ"), "kar");
         assert_eq!(romanize("ਸ਼ਹਿਰ"), "sahir");
-        // Adhak gemination.
+
         assert_eq!(romanize("ਕੱਕਾ"), "kakka");
         assert_eq!(romanize("ਪੱਖੀ"), "pakkhi");
         assert_eq!(romanize("ਸੱਚਾ"), "saccha");
-        // Halant cluster.
+
         assert_eq!(romanize("ਸਤ ਸ੍ਰੀ ਅਕਾਲ"), "sat sri akal");
     }
 
@@ -972,17 +883,26 @@ mod tests {
         assert_eq!(table.abugidas.len(), 3);
         assert_eq!(table.chart_map('а').as_deref(), Some("a"));
         assert_eq!(table.chart_map('Ж').as_deref(), Some("Zh"));
-        assert_eq!(table.abugida_for('क').map(|a| a.name.as_str()), Some("devanagari"));
-        assert_eq!(table.abugida_for('ব').map(|a| a.name.as_str()), Some("bengali"));
-        assert!(table.abugida_for('।').is_none(), "danda must not start an indic word");
+        assert_eq!(
+            table.abugida_for('क').map(|a| a.name.as_str()),
+            Some("devanagari")
+        );
+        assert_eq!(
+            table.abugida_for('ব').map(|a| a.name.as_str()),
+            Some("bengali")
+        );
+        assert!(
+            table.abugida_for('।').is_none(),
+            "danda must not start an indic word"
+        );
     }
 
     #[test]
     fn user_toml_overlays_builtin_by_script_name() {
-        let dir = std::env::temp_dir().join(format!("mewsic-romanize-merge-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mewsic-romanize-merge-{}", std::process::id()));
         let _ = std::fs::create_dir_all(dir.join("romanize"));
 
-        // A file with the same name as a built-in script overlays it.
         std::fs::write(
             dir.join("romanize/cyrillic.toml"),
             r#"
@@ -996,7 +916,6 @@ capitalize_first = true
         )
         .unwrap();
 
-        // A brand-new file adds a brand-new script.
         std::fs::write(
             dir.join("romanize/georgian.toml"),
             r#"
@@ -1027,16 +946,20 @@ dialect = "bengali"
         .unwrap();
 
         let table = Table::load(&dir);
-        // Existing mapping overlaid by the user's.
+
         assert_eq!(table.chart_map('х').as_deref(), Some("h"));
         assert_eq!(table.chart_map('а').as_deref(), Some("a"));
-        // A brand-new script added by the user.
+
         assert_eq!(table.chart_map('ა').as_deref(), Some("a"));
         assert_eq!(table.chart_map('ბ').as_deref(), Some("b"));
-        // Abugida consonant overlaid.
+
         let bengali = table.abugida_for('ক').unwrap();
         assert_eq!(bengali.consonant('ক'), Some("q"));
-        assert_eq!(bengali.consonant('খ'), Some("kh"), "other letters untouched");
+        assert_eq!(
+            bengali.consonant('খ'),
+            Some("kh"),
+            "other letters untouched"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1050,10 +973,7 @@ dialect = "bengali"
         assert_eq!(table.chart_map('а').as_deref(), Some("a"));
         let _ = std::fs::remove_dir_all(&dir);
     }
-
 }
-
-
 
 #[cfg(test)]
 mod debug_words {
@@ -1065,35 +985,31 @@ mod debug_words {
             ("愛", "ai"),
             ("愛してる", "aishiteru"),
             ("会いたい", "aitai"),
-        ("大丈夫", "daijoubu"),
-        ("約束", "yakusoku"),
-        ("大切", "taisetsu"),
-        ("素晴らしい", "subarashii"),
-        // Mixed kanji+kana the word dictionary doesn't cover is delegated to
-        // jptomew; its word segmentation inserts spaces, e.g. 渋谷 -> shibuya.
-        ("渋谷で待ってる", "shibuya de matteru"),
-        ("儚い想い", "hakanaiomoi"),
-    ];
-    for (word, expected) in &cases {
-        let r = crate::romanize::romanize(word);
-        if !expected.is_empty() {
-            assert_eq!(&r, expected, "word_at failed for {word}");
+            ("大丈夫", "daijoubu"),
+            ("約束", "yakusoku"),
+            ("大切", "taisetsu"),
+            ("素晴らしい", "subarashii"),
+            ("渋谷で待ってる", "shibuya de matteru"),
+            ("儚い想い", "hakanaiomoi"),
+        ];
+        for (word, expected) in &cases {
+            let r = crate::romanize::romanize(word);
+            if !expected.is_empty() {
+                assert_eq!(&r, expected, "word_at failed for {word}");
+            }
+            eprintln!("{word} -> {r}");
         }
-        eprintln!("{word} -> {r}");
     }
-}
 }
 
 #[cfg(test)]
 mod probe_suzume {
-    /// One-off probe: romanize the plain lyrics fetched from LrcLib for
-    /// RADWIMPS - Suzume. Run with:
-    /// cargo test probe_suzume -- --nocapture
+
     #[test]
     fn probe() {
         let text = match std::fs::read_to_string("/tmp/suzume_lyrics.txt") {
             Ok(t) => t,
-            Err(_) => return, // lyrics file not present, skip
+            Err(_) => return,
         };
         for line in text.lines() {
             eprintln!("{line}\n    -> {}", crate::romanize::romanize(line));

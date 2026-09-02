@@ -1,30 +1,3 @@
-# Copy this file to romanize/<script-name>.toml to add a new romanization
-# table.  The file name (without .toml) becomes the script's identifier.
-#
-# Use kind = "chart" for simple one-letter maps (most scripts).
-# Use kind = "abugida" for Indic-style abugidas (see devanagari.toml).
-#
-# capitalize_first: set true if the script has uppercase/lowercase distinction;
-# uppercase input letters will emit the letter mapping with the first
-# character capitalised (e.g.  П -> "P").
-#
-# For abugidas, required fields:
-#   dialect       = "hindi" | "bengali" | "punjabi" | "plain"
-#   range_start   (Unicode hex, e.g. 0x0900)
-#   range_end     (Unicode hex, e.g. 0x097F)
-#   halant        (the virama / halant character)
-#   anusvara      (the anusvara / bindu character)
-#   candrabindu   (the candrabindu character)
-#   visarga      (the visarga character)
-#   inherent      (the inherent vowel's romanization, e.g. "a" or "o")
-#   consonants    (full consonant -> romanization map)
-#   vowels        (independent vowel -> romanization map)
-#   matras        (vowel sign -> romanization map)
-#
-# Optional abugida fields:
-#   nukta, labials, digits, conjuncts, nukta_forms, conjunct_letters,
-#   gemination (a doubling mark like Gurmukhi adhak ੱ; doubles the next
-#   consonant's first letter)
 
 [[scripts]]
 name = "my-script"
@@ -32,5 +5,3 @@ kind = "chart"
 capitalize_first = false
 
 [scripts.letters]
-# "Ω" = "o"
-# "ω" = "o"

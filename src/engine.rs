@@ -46,13 +46,8 @@ impl Engine {
                     StatusMsg::Update { text, emoji } => {
                         if connector::patch_status(&token, &text, &emoji).is_ok() {
                             let ms = sent_at.elapsed().as_millis() as u64;
-                            let limit = sender_ctx
-                                .settings
-                                .read()
-                                .unwrap()
-                                .timing
-                                .autooffset
-                                .max(1);
+                            let limit =
+                                sender_ctx.settings.read().unwrap().timing.autooffset.max(1);
                             sender_ctx
                                 .shared
                                 .tracker
@@ -211,7 +206,12 @@ fn poll_once(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerS
     }
 }
 
-fn poll_spotify(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerState, token: &str) {
+fn poll_spotify(
+    ctx: &AppContext,
+    fetcher: &mut LyricsFetcher,
+    poller: &mut PollerState,
+    token: &str,
+) {
     if poller.spotify_token.is_none() {
         match connector::fetch_spotify_token(token) {
             Ok(t) => poller.spotify_token = Some(t),
@@ -374,7 +374,6 @@ pub struct UiSnapshot {
 }
 
 pub fn snapshot(ctx: &AppContext) -> UiSnapshot {
-    // Settings lock first, matching `maybe_send_line`'s lock order.
     let romanize = ctx.settings.read().unwrap().lyrics.romanize;
     let pb = ctx.shared.playback.lock().unwrap();
     UiSnapshot {

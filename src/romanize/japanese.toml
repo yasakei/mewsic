@@ -1,17 +1,9 @@
-# Japanese word readings for kanji compounds.
-# Kana are romanized by the jptomew library (libs/jptomew).
-# This file provides whole-word kanji readings that jptomew's dictionary
-# may not cover correctly. Add words as you meet them in songs.
-#
-# Conventions: Hepburn-style, matching jptomew's output (long おう -> "ou",
-# し -> "shi", ち -> "chi").
 
 [[scripts]]
 name = "japanese"
 kind = "words"
 
 [scripts.words]
-# pronouns & people
 "私" = "watashi"
 "僕" = "boku"
 "俺" = "ore"
@@ -27,7 +19,6 @@ kind = "words"
 "大人" = "otona"
 "友達" = "tomodachi"
 "家族" = "kazoku"
-# time
 "今日" = "kyou"
 "明日" = "ashita"
 "昨日" = "kinou"
@@ -103,7 +94,6 @@ kind = "words"
 "体" = "karada"
 "背中" = "senaka"
 "胸" = "mune"
-# feelings & states
 "寂しい" = "sabishii"
 "嬉しい" = "ureshii"
 "悲しい" = "kanashii"
@@ -130,7 +120,6 @@ kind = "words"
 "暑い" = "atsui"
 "寒い" = "samui"
 "美しい" = "utsukushii"
-# quantity & misc nouns
 "全部" = "zenbu"
 "沢山" = "takusan"
 "少し" = "sukoshi"
@@ -151,7 +140,6 @@ kind = "words"
 "真夜中" = "mayonaka"
 "何処" = "doko"
 "何故" = "naze"
-# common set phrases with kanji
 "頑張って" = "ganbatte"
 "大丈夫" = "daijoubu"
 "大切" = "taisetsu"
@@ -161,10 +149,8 @@ kind = "words"
 "愛してる" = "aishiteru"
 "会いたい" = "aitai"
 "乾杯" = "kanpai"
-# single-kanji words that read the same in lyric contexts
 "日" = "hi"
 "時" = "toki"
-# verbs & inflected forms commonly seen in lyrics
 "沈む" = "shizumu"
 "沈んで" = "shizunde"
 "沈み" = "shizumi"

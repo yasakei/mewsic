@@ -1,9 +1,3 @@
-//! Japanese text (kanji, kana) to rōmaji conversion.
-//!
-//! Converts mixed Japanese text (kanji, hiragana, katakana) into hiragana
-//! and romanized Latin text. Uses an embedded perfect-hash dictionary for
-//! kanji-to-hiragana resolution.
-
 mod classify;
 mod convert;
 mod dict;
@@ -25,29 +19,10 @@ fn dictionary() -> &'static KanjiLookup {
     DICT.get_or_init(KanjiLookup::load)
 }
 
-/// Transliterate Japanese text into hiragana and romaji.
-///
-/// ```
-/// let res = jptomew::transliterate("こんにちは世界!");
-/// assert_eq!(res.hiragana, "こんにちはせかい!");
-/// assert_eq!(res.romaji, "konnichiha sekai!");
-/// ```
 pub fn transliterate<S: AsRef<str>>(text: S) -> TranslitResult {
     convert::transliterate(text.as_ref(), dictionary())
 }
 
-/// Detect whether the input contains Japanese characters.
-///
-/// Returns [`JapaneseCheck::Yes`] if hiragana or katakana is found,
-/// [`JapaneseCheck::Possibly`] if only CJK ideographs are present
-/// (which could be Chinese), or [`JapaneseCheck::No`] otherwise.
-///
-/// ```
-/// # use jptomew::JapaneseCheck;
-/// assert_eq!(jptomew::detect("Abc"), JapaneseCheck::No);
-/// assert_eq!(jptomew::detect("日本"), JapaneseCheck::Possibly);
-/// assert_eq!(jptomew::detect("ラスト"), JapaneseCheck::Yes);
-/// ```
 pub fn detect<S: AsRef<str>>(text: S) -> JapaneseCheck {
     let mut saw_ideograph = false;
     for c in text.as_ref().chars() {

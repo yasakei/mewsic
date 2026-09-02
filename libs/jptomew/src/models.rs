@@ -1,12 +1,10 @@
 use std::borrow::Cow;
 
-/// The output of a Japanese-to-Latin transliteration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct TranslitResult {
-    /// Japanese text with kanji/katakana converted to hiragana.
     pub hiragana: String,
-    /// Fully romanized text.
+
     pub romaji: String,
 }
 
@@ -19,7 +17,6 @@ impl TranslitResult {
     }
 }
 
-/// Classification of a character's role in Japanese text flow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ScriptKind {
     Hiragana,
@@ -43,14 +40,12 @@ impl ScriptKind {
     }
 }
 
-/// Result of checking whether a string contains Japanese characters.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum JapaneseCheck {
-    /// No Japanese characters found.
     No,
-    /// Only CJK ideographs (could be Chinese or Japanese).
+
     Possibly,
-    /// Hiragana or katakana found — definitely Japanese.
+
     Yes,
 }
 
@@ -60,7 +55,6 @@ impl From<JapaneseCheck> for bool {
     }
 }
 
-/// A borrowed or owned string key used for kanji dictionary lookups.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct DictKey<'a>(pub Cow<'a, str>);
 
@@ -70,7 +64,6 @@ impl<'a> DictKey<'a> {
     }
 }
 
-/// A reading entry decoded from the binary dictionary.
 #[derive(Debug)]
 pub(crate) enum Reading {
     Plain { hira: String },
@@ -78,7 +71,6 @@ pub(crate) enum Reading {
     Contextual { hira: String, context: String },
 }
 
-/// A view over the raw reading bytes in the binary dictionary.
 pub(crate) struct ReadingSlice {
     data: &'static [u8],
     pos: usize,
@@ -131,32 +123,27 @@ impl Iterator for ReadingSlice {
         }
 
         Some(match tail {
-            Some(t) => Reading::Conditional {
-                hira,
-                tail_byte: t,
-            },
+            Some(t) => Reading::Conditional { hira, tail_byte: t },
             None if !ctx.is_empty() => Reading::Contextual { hira, context: ctx },
             _ => Reading::Plain { hira },
         })
     }
 }
 
-/// Hiragana Unicode range start.
 pub(crate) const HIRAGANA_START: u32 = 0x3041;
-/// Hiragana Unicode range end.
+
 pub(crate) const HIRAGANA_END: u32 = 0x3096;
-/// Katakana Unicode range start.
+
 pub(crate) const KATAKANA_START: u32 = 0x30A1;
-/// Katakana Unicode range end.
+
 pub(crate) const KATAKANA_END: u32 = 0x30FA;
-/// CJK ideograph range start.
+
 pub(crate) const IDEOGRAPH_START: u32 = 0x4E00;
-/// CJK ideograph range end.
+
 pub(crate) const IDEOGRAPH_END: u32 = 0x9FAF;
 
-/// The iteration mark `々`.
 pub(crate) const REPETITION_MARK: char = '々';
-/// The prolonged sound mark `ー`.
+
 pub(crate) const LONG_VOWEL: char = 'ー';
 
 #[cfg(test)]
