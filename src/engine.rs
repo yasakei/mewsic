@@ -314,6 +314,8 @@ fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Op
 }
 
 fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool) {
+    let lyrics_settings = ctx.settings.read().unwrap().lyrics.clone();
+
     if !song_changed && ctx.shared.playback.lock().unwrap().has_lyrics {
         return;
     }
@@ -326,23 +328,21 @@ fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool
         return;
     }
 
-    if song_changed {
-        if let Some(cached) = fetcher.read_cache(&name, &artist) {
-            let mut pb = ctx.shared.playback.lock().unwrap();
-            pb.lyrics = Some(cached);
-            pb.has_lyrics = true;
-            pb.current_line = None;
-            *ctx.shared.lyric_source.lock().unwrap() = "cache".to_string();
-            return;
-        }
-    }
-
-    let key = format!("{name}{artist}");
-    if fetcher.last_fetched_for() == key {
+    if let Some(cached) = fetcher.read_cache(&name, &artist) {
+        let mut pb = ctx.shared.playback.lock().unwrap();
+        pb.lyrics = Some(cached);
+        pb.has_lyrics = true;
+        pb.current_line = None;
+        *ctx.shared.lyric_source.lock().unwrap() = "cache".to_string();
         return;
     }
 
-    let result = fetcher.fetch(&name, &artist);
+    let key = format!("{name}{artist}");
+    if fetcher.last_fetched_for() == key && !fetcher.providers_changed(&lyrics_settings) {
+        return;
+    }
+
+    let result = fetcher.fetch(&name, &artist, &lyrics_settings);
 
     let mut pb = ctx.shared.playback.lock().unwrap();
     match result {
@@ -373,6 +373,8 @@ pub struct UiSnapshot {
 }
 
 pub fn snapshot(ctx: &AppContext) -> UiSnapshot {
+    // Settings lock first, matching `maybe_send_line`'s lock order.
+    let romanize = ctx.settings.read().unwrap().lyrics.romanize;
     let pb = ctx.shared.playback.lock().unwrap();
     UiSnapshot {
         song_name: pb.song_name.clone(),
@@ -381,7 +383,13 @@ pub fn snapshot(ctx: &AppContext) -> UiSnapshot {
         song_duration: pb.song_duration,
         is_playing: pb.is_playing,
         has_lyrics: pb.has_lyrics,
-        current_line: pb.current_line.as_ref().map(|l| l.text.clone()),
+        current_line: pb.current_line.as_ref().map(|l| {
+            if romanize {
+                crate::romanize::romanize(&l.text)
+            } else {
+                l.text.clone()
+            }
+        }),
     }
 }
 

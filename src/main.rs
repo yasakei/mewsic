@@ -9,6 +9,7 @@ mod lastfm;
 mod log;
 mod lyrics;
 mod net;
+mod romanize;
 mod state;
 mod sync;
 mod tui;
@@ -61,6 +62,7 @@ fn main() {
             println!("mewsic {}", env!("CARGO_PKG_VERSION"));
         }
         "stop" => stop(),
+        "romanize" => romanize_command(args.get(1)),
         "setup" => setup(),
         "settings" => settings(),
         "web" => run(true),
@@ -85,6 +87,7 @@ fn init_context() -> Arc<AppContext> {
         eprintln!("warning: could not create config dir {}", dir.display());
     }
     log::init(&dir);
+    romanize::init(&dir);
 
     let settings = config::Settings::load(&dir);
     let shared = Shared::new();
@@ -504,6 +507,28 @@ fn apply_update_helper(staged: Option<&String>) {
     if let Err(e) = update::apply_staged_as_admin(std::path::Path::new(staged)) {
         eprintln!("{e}");
         std::process::exit(1);
+    }
+}
+
+/// Diagnostic: romanize text given as an argument or on stdin, line by line.
+/// Lets a user verify the running binary contains the current romanizer:
+/// `mewsic romanize "君の中にある 赤と青き線"` or `mewsic romanize < lyrics.txt`.
+fn romanize_command(text: Option<&String>) {
+    use std::io::Write;
+    romanize::init(&config::config_dir());
+    let print = |line: &str| {
+        // Ignore broken pipes so `mewsic romanize ... | head` stays quiet.
+        let _ = writeln!(std::io::stdout(), "{}", romanize::romanize(line));
+    };
+    match text {
+        Some(t) => print(t),
+        None => {
+            use std::io::BufRead;
+            let stdin = std::io::stdin();
+            for line in stdin.lock().lines() {
+                print(&line.unwrap_or_default());
+            }
+        }
     }
 }
 

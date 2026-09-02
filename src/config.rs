@@ -59,6 +59,7 @@ pub struct Settings {
     pub view: ViewSettings,
     pub timing: TimingSettings,
     pub update: UpdateSettings,
+    pub lyrics: LyricsSettings,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -66,6 +67,65 @@ pub struct Settings {
 pub struct LastFmSettings {
     pub api_key: String,
     pub username: String,
+}
+
+/// Which lyrics providers are tried, in order. `providers` is the ordered list
+/// of providers to fetch from (built-ins plus `custom`), `romanize` turns
+/// non-Latin lyric text into Latin letters on the fly, and `custom` lets the
+/// user define their own provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LyricsSettings {
+    pub providers: Vec<String>,
+    pub romanize: bool,
+    pub custom: Option<CustomProvider>,
+}
+
+impl Default for LyricsSettings {
+    fn default() -> Self {
+        LyricsSettings {
+            providers: vec![
+                "lrclib".to_string(),
+                "netease".to_string(),
+                "qqmusic".to_string(),
+            ],
+            romanize: false,
+            custom: None,
+        }
+    }
+}
+
+impl LyricsSettings {
+    /// Built-in provider ids that can be toggled, in the canonical order they
+    /// are offered in the UI.
+    pub const BUILTIN: &'static [&'static str] = &["lrclib", "netease", "qqmusic"];
+
+    pub fn provider_label(id: &str) -> &'static str {
+        match id {
+            "lrclib" => "LrcLib",
+            "netease" => "NetEase Music",
+            "qqmusic" => "QQ Music",
+            "custom" => "Custom",
+            _ => "Unknown",
+        }
+    }
+}
+
+/// A user-defined lyrics provider.
+///
+/// `url` is fetched with `{title}` and `{artist}` URL-quoted placeholders
+/// substituted in. `json_path` is an optional JSON pointer (e.g. `/lrc/lyric`)
+/// used to pull the raw LRC text out of a JSON response; when it is `None` the
+/// whole response body is treated as LRC text. `api_key`, when set, is
+/// substituted into a `{api_key}` placeholder in the URL and also sent as an
+/// `Authorization: Bearer` header.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CustomProvider {
+    pub name: String,
+    pub url: String,
+    pub api_key: Option<String>,
+    pub json_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,6 +371,47 @@ mod tests {
         let back: Settings = toml::from_str(&raw).unwrap();
         assert_eq!(back.source, Source::Lastfm);
         assert_eq!(back.lastfm.username, "someone");
+    }
+
+    #[test]
+    fn lyrics_defaults_to_all_builtins() {
+        let s = Settings::default();
+        assert_eq!(s.lyrics.providers, vec!["lrclib", "netease", "qqmusic"]);
+        assert!(s.lyrics.custom.is_none());
+    }
+
+    #[test]
+    fn lyrics_serde_roundtrip_keeps_custom_provider() {
+        let mut s = Settings::default();
+        s.lyrics.providers = vec!["lrclib".into(), "custom".into()];
+        s.lyrics.custom = Some(CustomProvider {
+            name: "Provider".into(),
+            url: "https://example.com/{title}/{artist}".into(),
+            api_key: Some("sekrit".into()),
+            json_path: Some("/lrc/lyric".into()),
+        });
+        let raw = toml::to_string(&s).unwrap();
+        let back: Settings = toml::from_str(&raw).unwrap();
+        assert_eq!(back.lyrics.providers, vec!["lrclib", "custom"]);
+        let c = back.lyrics.custom.unwrap();
+        assert_eq!(c.name, "Provider");
+        assert_eq!(c.api_key.as_deref(), Some("sekrit"));
+        assert_eq!(c.json_path.as_deref(), Some("/lrc/lyric"));
+    }
+
+    #[test]
+    fn custom_provider_accepts_legacy_config_without_api_key() {
+        let raw = r#"
+            [lyrics]
+            providers = ["custom"]
+            [lyrics.custom]
+            name = "Old"
+            url = "https://example.com/{title}"
+            json_path = "/lyrics"
+        "#;
+        let s: Settings = toml::from_str(raw).unwrap();
+        assert_eq!(s.lyrics.custom.as_ref().unwrap().api_key, None);
+        assert_eq!(s.lyrics.custom.as_ref().unwrap().name, "Old");
     }
 
     #[test]

@@ -2,6 +2,7 @@
 name = "mewsic"
 version = "1.1.2"
 edition = "2021"
+build = "src/build.rs"
 description = "Mewsic — mirror the song you're playing into your Discord status, line by line."
 authors = ["Yasakei"]
 license = "MIT"
@@ -10,7 +11,11 @@ license = "MIT"
 name = "mewsic"
 path = "src/main.rs"
 
+[workspace]
+members = [".", "libs/jptomew"]
+
 [dependencies]
+jptomew = { path = "libs/jptomew" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"

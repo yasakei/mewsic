@@ -9,15 +9,15 @@ use crate::state::LyricsLine;
 use crate::util::{decode_html_entities, sanitize_filename, urlencode};
 
 pub trait Source {
-    fn app_name(&self) -> &'static str;
+    fn app_name(&self) -> String;
     fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String>;
 }
 
 pub struct LrcLibSource;
 
 impl Source for LrcLibSource {
-    fn app_name(&self) -> &'static str {
-        "LrcLib"
+    fn app_name(&self) -> String {
+        "LrcLib".to_string()
     }
 
     fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String> {
@@ -45,8 +45,8 @@ impl Source for LrcLibSource {
 pub struct NetEaseSource;
 
 impl Source for NetEaseSource {
-    fn app_name(&self) -> &'static str {
-        "NetEase Music"
+    fn app_name(&self) -> String {
+        "NetEase Music".to_string()
     }
 
     fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String> {
@@ -106,8 +106,8 @@ impl NetEaseSource {
 pub struct QqMusicSource;
 
 impl Source for QqMusicSource {
-    fn app_name(&self) -> &'static str {
-        "QQ Music"
+    fn app_name(&self) -> String {
+        "QQ Music".to_string()
     }
 
     fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String> {
@@ -160,6 +160,77 @@ impl QqMusicSource {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .ok_or_else(|| "no mid in search".into())
+    }
+}
+
+/// A user-defined lyrics provider backed by a URL template and an optional
+/// JSON pointer used to locate the raw LRC text inside a JSON response.
+pub struct CustomSource {
+    config: crate::config::CustomProvider,
+}
+
+impl CustomSource {
+    pub fn new(config: crate::config::CustomProvider) -> CustomSource {
+        CustomSource { config }
+    }
+
+    fn api_key(&self) -> &str {
+        self.config.api_key.as_deref().unwrap_or("").trim()
+    }
+
+    fn request_url(&self, title: &str, artist: &str) -> String {
+        self.config
+            .url
+            .replace("{title}", &urlencode(title))
+            .replace("{artist}", &urlencode(artist))
+            .replace("{api_key}", &urlencode(self.api_key()))
+    }
+}
+
+impl Source for CustomSource {
+    fn app_name(&self) -> String {
+        if self.config.name.trim().is_empty() {
+            "Custom".to_string()
+        } else {
+            self.config.name.clone()
+        }
+    }
+
+    fn fetch(&self, title: &str, artist: &str) -> Result<Vec<LyricsLine>, String> {
+        if self.config.url.trim().is_empty() {
+            return Err("custom provider has no url".into());
+        }
+        let api_key = self.api_key();
+        let url = self.request_url(title, artist);
+        let req = net::agent().get(&url);
+        let req = if !api_key.is_empty() {
+            req.set("Authorization", &format!("Bearer {api_key}"))
+        } else {
+            req
+        };
+        let resp = req.call().map_err(|e| e.to_string())?;
+        if resp.status() != 200 {
+            return Err(format!("custom provider responded {}", resp.status()));
+        }
+        let body = resp
+            .into_string()
+            .map_err(|e| format!("custom provider read error: {e}"))?;
+
+        let lrc = match &self.config.json_path {
+            Some(path) if !path.is_empty() => {
+                let json: serde_json::Value =
+                    serde_json::from_str(&body).map_err(|e| format!("bad json: {e}"))?;
+                json.pointer(path)
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| format!("json path {path:?} not found"))?
+                    .to_string()
+            }
+            _ => body,
+        };
+        if lrc.trim().is_empty() {
+            return Err("custom provider returned no lyrics".into());
+        }
+        Ok(parse_lrc(&lrc))
     }
 }
 
@@ -220,26 +291,29 @@ struct CachedLyrics {
 }
 
 pub struct LyricsFetcher {
-    sources: Vec<Box<dyn Source>>,
     cache_dir: PathBuf,
     last_fetched_for: String,
+    last_provider_sig: String,
 }
 
 impl LyricsFetcher {
     pub fn new(config_dir: &Path) -> LyricsFetcher {
         LyricsFetcher {
-            sources: vec![
-                Box::new(LrcLibSource),
-                Box::new(NetEaseSource),
-                Box::new(QqMusicSource),
-            ],
             cache_dir: config_dir.join("cache"),
             last_fetched_for: String::new(),
+            last_provider_sig: String::new(),
         }
     }
 
     pub fn last_fetched_for(&self) -> &str {
         &self.last_fetched_for
+    }
+
+    /// True when the configured provider set differs from the last fetch
+    /// attempt, so a same-song retry must not be skipped by the anti-hammer
+    /// guard (e.g. the user just toggled a provider back on).
+    pub fn providers_changed(&self, lyrics: &crate::config::LyricsSettings) -> bool {
+        self.last_fetched_for.is_empty() || self.last_provider_sig != provider_sig(lyrics)
     }
 
     fn cache_path(&self, title: &str, artist: &str) -> PathBuf {
@@ -268,18 +342,47 @@ impl LyricsFetcher {
         );
     }
 
-    pub fn fetch(&mut self, title: &str, artist: &str) -> Option<(Vec<LyricsLine>, String)> {
+    /// Build the ordered list of sources requested by `lyrics`, excluding any
+    /// provider that is toggled off (and a custom provider with no URL).
+    fn enabled_sources(&self, lyrics: &crate::config::LyricsSettings) -> Vec<Box<dyn Source>> {
+        let mut out: Vec<Box<dyn Source>> = Vec::new();
+        for id in &lyrics.providers {
+            match id.as_str() {
+                "lrclib" => out.push(Box::new(LrcLibSource)),
+                "netease" => out.push(Box::new(NetEaseSource)),
+                "qqmusic" => out.push(Box::new(QqMusicSource)),
+                "custom" => {
+                    if let Some(custom) = &lyrics.custom {
+                        if !custom.url.trim().is_empty() {
+                            out.push(Box::new(CustomSource::new(custom.clone())));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    pub fn fetch(
+        &mut self,
+        title: &str,
+        artist: &str,
+        lyrics: &crate::config::LyricsSettings,
+    ) -> Option<(Vec<LyricsLine>, String)> {
         self.last_fetched_for = format!("{title}{artist}");
+        self.last_provider_sig = provider_sig(lyrics);
 
         if let Some(cached) = self.read_cache(title, artist) {
             return Some((cached, "cache".to_string()));
         }
 
-        for source in &self.sources {
+        let sources = self.enabled_sources(lyrics);
+        for source in sources {
             match source.fetch(title, artist) {
                 Ok(lines) if !lines.is_empty() => {
-                    self.write_cache(title, artist, source.app_name(), &lines);
-                    return Some((lines, source.app_name().to_string()));
+                    self.write_cache(title, artist, &source.app_name(), &lines);
+                    return Some((lines, source.app_name()));
                 }
                 _ => continue,
             }
@@ -287,6 +390,25 @@ impl LyricsFetcher {
 
         None
     }
+}
+
+/// A signature of what a fetch would produce: the provider ids plus the custom
+/// provider's url/api key/json path. Used to detect provider changes so the
+/// same song gets refetched instead of being skipped by the anti-hammer guard.
+fn provider_sig(lyrics: &crate::config::LyricsSettings) -> String {
+    let custom = lyrics
+        .custom
+        .as_ref()
+        .map(|c| {
+            format!(
+                "{}|{}|{}",
+                c.url,
+                c.api_key.as_deref().unwrap_or(""),
+                c.json_path.as_deref().unwrap_or("")
+            )
+        })
+        .unwrap_or_default();
+    format!("{}::{}", lyrics.providers.join(","), custom)
 }
 
 #[cfg(test)]
@@ -337,5 +459,152 @@ mod tests {
         let (times, body) = split_timestamps("[ti:Some Song] title");
         assert!(times.is_empty());
         assert!(body.contains("[ti:Some Song]"));
+    }
+
+    #[test]
+    fn enabled_sources_respect_provider_list() {
+        use crate::config::LyricsSettings;
+        let fetcher = LyricsFetcher::new(std::path::Path::new("/nonexistent"));
+        let lyrics = LyricsSettings {
+            providers: vec!["netease".into()],
+            ..LyricsSettings::default()
+        };
+        let sources = fetcher.enabled_sources(&lyrics);
+        assert_eq!(sources.len(), 1);
+
+        let empty = LyricsSettings {
+            providers: vec![],
+            ..LyricsSettings::default()
+        };
+        assert!(fetcher.enabled_sources(&empty).is_empty());
+    }
+
+    #[test]
+    fn enabled_sources_skips_custom_without_url() {
+        use crate::config::{CustomProvider, LyricsSettings};
+        let fetcher = LyricsFetcher::new(std::path::Path::new("/nonexistent"));
+        let empty_custom = LyricsSettings {
+            providers: vec!["custom".into()],
+            romanize: false,
+            custom: Some(CustomProvider {
+                name: "My".into(),
+                url: String::new(),
+                api_key: None,
+                json_path: None,
+            }),
+        };
+        assert!(fetcher.enabled_sources(&empty_custom).is_empty());
+
+        let filled_custom = LyricsSettings {
+            custom: Some(CustomProvider {
+                name: "My".into(),
+                url: "https://example.com/{title}".into(),
+                api_key: None,
+                json_path: None,
+            }),
+            ..empty_custom
+        };
+        assert_eq!(fetcher.enabled_sources(&filled_custom).len(), 1);
+    }
+
+    #[test]
+    fn providers_changed_detects_provider_edits() {
+        use crate::config::LyricsSettings;
+        let mut fetcher = LyricsFetcher::new(std::path::Path::new("/nonexistent"));
+
+        // Nothing fetched yet -> differs, so a retry is allowed.
+        assert!(fetcher.providers_changed(&LyricsSettings::default()));
+
+        fetcher.last_fetched_for = "songartist".to_string();
+
+        let mut lyrics = LyricsSettings {
+            providers: vec!["lrclib".into(), "netease".into()],
+            romanize: false,
+            custom: None,
+        };
+        fetcher.last_provider_sig = provider_sig(&lyrics);
+        // Same song + same providers -> the anti-hammer guard can skip.
+        assert!(!fetcher.providers_changed(&lyrics));
+
+        // Toggling a provider (or editing the custom one) invalidates the guard.
+        lyrics.providers = vec!["netease".into()];
+        assert!(fetcher.providers_changed(&lyrics));
+
+        lyrics.providers = vec!["custom".into()];
+        lyrics.custom = Some(crate::config::CustomProvider {
+            name: "x".into(),
+            url: "https://example.com/{title}".into(),
+            api_key: Some("k".into()),
+            json_path: None,
+        });
+        fetcher.last_provider_sig = provider_sig(&lyrics);
+        assert!(!fetcher.providers_changed(&lyrics));
+
+        lyrics.custom.as_mut().unwrap().api_key = Some("k2".into());
+        assert!(fetcher.providers_changed(&lyrics));
+    }
+
+    #[test]
+    fn custom_source_substitutes_all_placeholders() {
+        let source = CustomSource::new(crate::config::CustomProvider {
+            name: "My".into(),
+            url: "https://example.com/q?t={title}&a={artist}&k={api_key}".into(),
+            api_key: Some("top secret".into()),
+            json_path: None,
+        });
+        let url = source.request_url("Hello World", "AC/DC");
+        assert!(url.contains("t=Hello%20World"), "{url}");
+        assert!(url.contains("a=AC%2FDC"), "{url}");
+        assert!(url.contains("k=top%20secret"), "{url}");
+
+        let no_key = CustomSource::new(crate::config::CustomProvider {
+            name: "My".into(),
+            url: "https://example.com/q?t={title}&k={api_key}".into(),
+            api_key: None,
+            json_path: None,
+        });
+        assert!(no_key.request_url("s", "a").ends_with("k="));
+    }
+
+    #[test]
+    fn custom_source_fetches_from_local_server() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap();
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let auth = req
+                .lines()
+                .find_map(|l| l.strip_prefix("Authorization: "))
+                .unwrap_or("")
+                .to_string();
+            let body = "[00:01.00] hello\n[00:02.00] world";
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(resp.as_bytes()).unwrap();
+            auth
+        });
+
+        let source = CustomSource::new(crate::config::CustomProvider {
+            name: "Local".into(),
+            url: format!("http://127.0.0.1:{port}/lrc?t={{title}}&k={{api_key}}"),
+            api_key: Some("sekrit".into()),
+            json_path: None,
+        });
+        let lines = source.fetch("song", "artist").unwrap();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "hello");
+        assert_eq!(lines[1].time, 2_000);
+        assert_eq!(server.join().unwrap(), "Bearer sekrit");
     }
 }

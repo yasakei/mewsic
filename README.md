@@ -29,7 +29,14 @@ Mewsic runs as a single native binary:
     (via the WebScrobbler extension or the YT Music desktop app's built-in
     Last.fm scrobbling) and any other scrobbled player.
 - Fetches synced lyrics from LrcLib, NetEase Music, and QQ Music, in that
-  order, with an on-disk cache so repeat plays are instant.
+  order, with an on-disk cache so repeat plays are instant. Pick any
+  combination of providers (terminal settings editor or web panel), and add a
+  custom provider: a URL template with `{title}`/`{artist}`/`{api_key}`
+  placeholders (the key is also sent as `Authorization: Bearer`), plus an
+  optional JSON path to the LRC text. An optional **romanize** toggle turns
+  Japanese, Korean, Hindi, Bangla, Cyrillic, Greek, and Arabic lyric text into
+  Latin letters (the providers don't offer romanized lyrics, so this is done
+  locally; Chinese passes through).
 - Sends each line to Discord ahead of time using a fixed offset or an
   auto-offset that learns from measured Discord API latency.
 - Clears the status the moment the song changes (optional).
@@ -65,6 +72,48 @@ Mewsic runs as a single native binary:
 Note: the Last.fm API reports the current track but no playback position, so
 progress is estimated with a local clock. Lyric sync stays accurate while the
 song plays straight through; pauses and seeks are not detected.
+
+## Romanization data
+
+All the letter→Latin tables behind the **romanize** toggle live in the
+[`romanize/`](romanize/) folder — **one TOML file per script**, named after it
+(`cyrillic.toml`, `bengali.toml`, …), plus
+[`template.toml`](romanize/template.toml) to copy when adding a new script.
+A build script embeds every file in that folder automatically, so adding a
+script is just dropping in a file — no Rust changes, no registry to update.
+
+You can also test mapping changes live without rebuilding: create
+`~/.config/mewsic/romanize/` with the same layout. A file there with the same
+name as a built-in script overlays it (maps merge, your entries win); a new
+name adds a whole new script. Malformed files are logged and ignored.
+
+Two script kinds:
+
+- **`kind = "chart"`** — plain one-letter maps (Cyrillic, Greek, Arabic…). Example — adding Georgian as `romanize/georgian.toml`:
+
+  ```toml
+  [[scripts]]
+  name = "georgian"
+  kind = "chart"
+
+  [scripts.letters]
+  "ა" = "a"
+  "ბ" = "b"
+  "გ" = "g"
+  # ...
+  ```
+
+- **`kind = "abugida"`** — Indic-style scripts (Devanagari, Bengali). A
+  consonant carries the script's `inherent` vowel, `[scripts.matras]` replace
+  it, the `halant` removes it for conjuncts, and `dialect` picks the phonetic
+  rules (`"hindi"`, `"bengali"`, or `"plain"`). `[scripts.conjuncts]` keys are
+  the full written conjunct (e.g. `"জ্ঞ"`) and override its pronunciation;
+  `[scripts.conjunct_letters]` overrides a consonant when it appears inside a
+  conjunct (Bengali স alone is `sh` but `s` in স্ত).
+
+Kana and Hangul are handled algorithmically in `src/romanize.rs` (yōon/double
+consonants and Jamo decomposition) — their tables are not data. Chinese hanzi
+pass through unchanged, since pinyin needs a dictionary.
 
 ## Building
 
@@ -124,7 +173,7 @@ into the credential store automatically on startup.
 | `engine.rs`       | Poll loop, lyric sync, status sender thread           |
 | `connector.rs`    | Discord token refresh, Spotify playback state         |
 | `lastfm.rs`       | Last.fm playback source (scrobble polling, duration)  |
-| `lyrics.rs`       | Lyric sources (LrcLib/NetEase/QQ), LRC parser, cache  |
+| `lyrics.rs`       | Lyric sources (LrcLib/NetEase/QQ/custom), LRC parser, cache |
 | `sync.rs`         | Status text rendering (offset, template, crop)        |
 | `state.rs`        | Shared playback/tracker state, UI snapshot            |
 | `config.rs`       | TOML settings                                         |

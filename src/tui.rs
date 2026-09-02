@@ -209,6 +209,8 @@ fn prompt_text(screen: &Screen, question: &str, default: &str, masked: bool) -> 
     loop {
         let hint = if default.is_empty() {
             "Enter to accept · Esc to cancel".to_string()
+        } else if masked {
+            format!("Enter to accept · Esc to cancel · default: {}", "•".repeat(6))
         } else {
             format!("Enter to accept · Esc to cancel · default: {default}")
         };
@@ -315,6 +317,64 @@ fn prompt_choice<'a>(
             if prefixes.next().is_none() {
                 return Some(key);
             }
+        }
+    }
+}
+
+/// A checklist picker: render `items` (id, label) with a [x]/[ ] marker, let
+/// the user toggle any item with its number key, and return the selected ids
+/// (in `items` order) when Enter is pressed. Esc/ctrl-c cancels.
+fn prompt_multi_choice(
+    screen: &Screen,
+    question: &str,
+    items: &[(&str, &str)],
+    selected: &[String],
+) -> Option<Vec<String>> {
+    let mut chosen: Vec<String> = selected.to_vec();
+    loop {
+        let mut scr = Screen::new(&screen.title);
+        scr.lines = screen.lines.clone();
+        scr.blank();
+        for (i, (id, label)) in items.iter().enumerate() {
+            let mark = if chosen.iter().any(|c| c == id) { "[x]" } else { "[ ]" };
+            scr.push(Line::from(vec![
+                cyan_bold(&format!("{}", i + 1)),
+                Span::raw(format!("  {mark}  {label}")),
+            ]));
+        }
+        scr.blank();
+        let p = Prompt {
+            question,
+            input: "",
+            masked: false,
+            hint: "Press a number to toggle · Enter = done · Esc = cancel".to_string(),
+        };
+        draw_screen(&scr, Some(&p), "");
+        match read_key_blocking() {
+            Some(k) if is_ctrl_c(&k) || k.code == KeyCode::Esc => return None,
+            Some(k) if k.code == KeyCode::Enter => {
+                return Some(
+                    items
+                        .iter()
+                        .filter(|(id, _)| chosen.iter().any(|c| c == id))
+                        .map(|(id, _)| id.to_string())
+                        .collect(),
+                );
+            }
+            Some(k) => {
+                if let KeyCode::Char(c) = k.code {
+                    if let Some(d) = c.to_digit(10).filter(|d| *d >= 1) {
+                        if let Some((id, _)) = items.get(d as usize - 1) {
+                            if let Some(pos) = chosen.iter().position(|c| c == id) {
+                                chosen.remove(pos);
+                            } else {
+                                chosen.push(id.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            None => {}
         }
     }
 }
@@ -642,6 +702,23 @@ fn summary_screen(settings: &crate::config::Settings) -> Screen {
         if settings.update.auto_start { "on" } else { "off" },
         settings.update.auto_start,
     ));
+    let lyrics_label = if settings.lyrics.providers.is_empty() {
+        "no providers".to_string()
+    } else {
+        settings
+            .lyrics
+            .providers
+            .iter()
+            .map(|p| crate::config::LyricsSettings::provider_label(p))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    s.push(kv("Lyrics", &lyrics_label, !settings.lyrics.providers.is_empty()));
+    s.push(kv(
+        "Romanize",
+        if settings.lyrics.romanize { "on" } else { "off" },
+        settings.lyrics.romanize,
+    ));
     s
 }
 
@@ -700,6 +777,24 @@ pub fn summary(settings: &crate::config::Settings) -> String {
         "  Auto start: {}\n",
         if settings.update.auto_start { "on" } else { "off" }
     ));
+    out.push_str(&format!(
+        "  Lyrics:     {}\n",
+        if settings.lyrics.providers.is_empty() {
+            "no providers".to_string()
+        } else {
+            settings
+                .lyrics
+                .providers
+                .iter()
+                .map(|p| crate::config::LyricsSettings::provider_label(p))
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    ));
+    out.push_str(&format!(
+        "  Romanize:   {}\n",
+        if settings.lyrics.romanize { "on" } else { "off" }
+    ));
     out
 }
 
@@ -724,12 +819,13 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
         menu.push(Line::from(vec![cyan_bold("4"), Span::raw("  Timing (offset, autooffset)")]));
         menu.push(Line::from(vec![cyan_bold("5"), Span::raw("  Autostart")]));
         menu.push(Line::from(vec![cyan_bold("6"), Span::raw("  Update (manual check)")]));
+        menu.push(Line::from(vec![cyan_bold("7"), Span::raw("  Lyrics (providers, custom)")]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
         )));
 
-        let choice = prompt_text(&menu, "Choose 1-6 or Enter to save/exit", "", false)?;
+        let choice = prompt_text(&menu, "Choose 1-7 or Enter to save/exit", "", false)?;
         let c = choice.trim().to_lowercase();
 
         if c.is_empty() {
@@ -842,9 +938,81 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                 scr.blank();
                 prompt_continue(&scr)?;
             }
+            "7" | "lyrics" => {
+                let mut scr = Screen::new("Lyrics");
+                scr.push(Line::from(dim(
+                    "Which providers are tried for lyrics, in order.",
+                )));
+                scr.blank();
+                let mut items: Vec<(&str, &str)> = crate::config::LyricsSettings::BUILTIN
+                    .iter()
+                    .map(|id| (*id, crate::config::LyricsSettings::provider_label(id)))
+                    .collect();
+                items.push(("custom", "Custom (you define the URL)"));
+                let sel = prompt_multi_choice(
+                    &scr,
+                    "Pick lyrics providers (toggle with numbers):",
+                    &items,
+                    &settings.lyrics.providers,
+                )?;
+                settings.lyrics.providers = sel;
+
+                if settings.lyrics.providers.iter().any(|p| p == "custom") {
+                    let mut custom = settings
+                        .lyrics
+                        .custom
+                        .clone()
+                        .unwrap_or_default();
+                    scr.blank();
+                    scr.push(Line::from(dim(
+                        "{title} {artist} {api_key} are substituted into the URL.",
+                    )));
+                    custom.name =
+                        prompt_text(&scr, "Provider name", &custom.name, false)?;
+                    custom.url = prompt_text(
+                        &scr,
+                        "URL template (URL-quoted)",
+                        &custom.url,
+                        false,
+                    )?;
+                    let key_default = custom.api_key.clone().unwrap_or_default();
+                    let key = prompt_text(
+                        &scr,
+                        "API key (optional)",
+                        &key_default,
+                        true,
+                    )?;
+                    custom.api_key = if key.trim().is_empty() {
+                        None
+                    } else {
+                        Some(key.trim().to_string())
+                    };
+                    let path_default = custom.json_path.clone().unwrap_or_default();
+                    let path = prompt_text(
+                        &scr,
+                        "JSON path to LRC (blank = raw body)",
+                        &path_default,
+                        false,
+                    )?;
+                    custom.json_path = if path.trim().is_empty() {
+                        None
+                    } else {
+                        Some(path.trim().to_string())
+                    };
+                    settings.lyrics.custom = Some(custom);
+                } else {
+                    settings.lyrics.custom = None;
+                }
+                scr.blank();
+                scr.push(Line::from(dim(
+                    "Japanese/Korean/Hindi/Bangla/Cyrillic/Greek/Arabic become Latin.",
+                )));
+                settings.lyrics.romanize =
+                    prompt_confirm(&scr, "Romanize lyrics?", settings.lyrics.romanize)?;
+            }
             _ => {
                 let mut scr = Screen::new("Settings editor");
-                scr.push(Line::from(yellow("Unknown choice — pick 1-6 or press Enter.")));
+                scr.push(Line::from(yellow("Unknown choice — pick 1-7 or press Enter.")));
                 prompt_continue(&scr)?;
                 continue;
             }
