@@ -107,6 +107,8 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("দক্ষিণ", "dokkhin"),
         ("এশিয়া", "asia"),
         ("এশিয়ার", "asiar"),
+        ("মার", "maro"),
+        ("মারো", "maro"),
         ("আমার", "amar"),
         ("তোমার", "tomar"),
         ("তার", "tar"),
