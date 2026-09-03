@@ -1,4 +1,3 @@
-// Bengali (Bangla) script range
 pub(crate) const BENGALI_START: u32 = 0x0980;
 pub(crate) const BENGALI_END: u32 = 0x09FF;
 

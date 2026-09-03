@@ -1,61 +1,64 @@
 # bntomew
 
-Transliterate Bangla (Bengali script) into the romanized Bangla that today's
-generation actually uses — often called **banglish** (Bangla + English).
+Bangla to romanized transliteration for modern usage.
 
-## How it works
+`bntomew` converts Bengali script to the romanized form commonly used in contemporary writing, often referred to as banglish. It prioritizes how the language is currently written over strict academic transcription.
 
-bntomew does **not** apply strict academic transcription rules, because modern
-speakers don't use them. Instead it is built around two layers that mirror how
-Roman Bangla is really written:
+## Features
 
-### 1. Lexicon (data-driven, primary)
+* Lexicon first. High frequency words map directly to their established romanized forms. This handles borrowed terms and conjunct sensitive vocabulary.
+* Syllable engine fallback. Unknown words are processed through a rule based abugida engine that handles consonants, vowel signs, independent vowels and the inherent vowel.
+* Suffix aware. Common bound suffixes such as `এর`, `র`, `তে`, `কে` are recognized when attached to lexicon entries.
 
-A curated dictionary maps whole Bangla words directly to their modern
-romanization. This covers the two categories that rules get wrong:
+## Installation
 
-- **Borrowed words** — Bangla words with an English/Latin form that people spell
-  in Latin, e.g.
+Add to your `Cargo.toml`:
 
-  | Bangla | Romanized |
-  |--------|-----------|
-  | টেবিল | table |
-  | স্কুল | school |
-  | চেয়ার | chair |
-  | কম্পিউটার | computer |
-  | সিনেমা | cinema |
+```toml
+[dependencies]
+bntomew = { path = "libs/bntomew" }
+```
 
-- **Conjunct-final words** — Bangla words where a conjunct ending keeps its
-  vowel in casual writing, e.g. রাষ্ট্র → `rashtro`, শব্দ → `shobdo`.
-
-Lexicon words can absorb common bound suffixes (এর, র, তে, কে, ...), so
-বাংলাদেশের → `bangladesher`, এশিয়ার → `asiar`.
-
-### 2. Syllable engine (fallback)
-
-Any word not in the lexicon is converted with a rule-based abugida engine
-(consonants, matras, independent vowels, and the Bangla inherent vowel `o`).
-Bangla drops the word-final inherent vowel, so বাংলা → `bangla` (not
-`banglao`).
+Requires Rust 1.70 or later. Edition 2021.
 
 ## Usage
 
 ```rust
-let res = bntomew::transliterate("বাংলাদেশ দক্ষিণ এশিয়ার একটি স্বাধীন সার্বভৌম রাষ্ট্র।");
-assert_eq!(res.romanized, "bangladesh dokkhin asiar ekti shadin sarbovum rashtro.");
-assert_eq!(res.bengali, "বাংলাদেশ দক্ষিণ এশিয়ার একটি স্বাধীন সার্বভৌম রাষ্ট্র।");
+use bntomew::transliterate;
+
+let result = transliterate("বাংলাদেশ দক্ষিণ এশিয়ার একটি স্বাধীন সার্বভৌম রাষ্ট্র।");
+assert_eq!(result.romanized, "bangladesh dokkhin asiar ekti shadin sarbovum rashtro.");
+assert_eq!(result.bengali, "বাংলাদেশ দক্ষিণ এশিয়ার একটি স্বাধীন সার্বভৌম রাষ্ট্র।");
+
+let result = transliterate("আমি ভালো আছি");
+assert_eq!(result.romanized, "ami bhalo achi");
 ```
 
-## Example
+`transliterate` returns `TranslitResult` with fields `bengali` and `romanized`. Input may contain mixed scripts. Non Bengali content passes through unchanged.
 
-| Bangla | Romanized |
-|--------|-----------|
+## Examples
+
+| Bengali | Romanized |
+|---|---|
 | আমি ভালো আছি | ami bhalo achi |
 | ধন্যবাদ | dhonnobad |
 | ভালোবাসা | bhalobasha |
 | স্বাধীন সার্বভৌম রাষ্ট্র | shadin sarbovum rashtro |
 | বাংলাদেশ | bangladesh |
 
+## Project Structure
+
+* `src/consts.rs` script and sign constants
+* `src/dict.rs` lexicon data
+* `src/convert.rs` transliteration engine
+* `src/lib.rs` public API
+
+## Testing
+
+```sh
+cargo test -p bntomew
+```
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

@@ -6,8 +6,6 @@ pub struct TranslitResult {
     pub romanized: String,
 }
 
-/// Bound suffixes (genitive/locative/dative/etc.) glued to a preceding word.
-/// Keyed by the Bangla suffix, romanized without a leading space.
 const SUFFIXES: &[(&str, &str)] = &[
     ("এর", "er"),
     ("ের", "er"),
@@ -40,7 +38,6 @@ pub fn transliterate(input: &str) -> TranslitResult {
             continue;
         }
 
-        // Lexicon words match only at word boundaries, but may absorb a suffix.
         let mut matched = false;
         if !chars[..i].iter().rev().copied().next().is_some_and(is_bengali) {
             for (word, rom) in &words {
@@ -92,7 +89,6 @@ pub fn transliterate(input: &str) -> TranslitResult {
         i += 1;
     }
 
-    // Collapse redundant spaces.
     let mut out = String::with_capacity(romanized.len());
     let mut prev_space = false;
     for c in romanized.chars() {
@@ -130,7 +126,6 @@ struct Syl {
     roman: String,
 }
 
-/// One parsed element from a Bangla word.
 #[derive(Clone, Copy)]
 enum Elem {
     Consonant(char),
@@ -144,7 +139,6 @@ enum Elem {
     Other(char),
 }
 
-/// Converts one contiguous Bangla word into romanization.
 fn convert_word(chars: &[char], i: &mut usize) -> Syl {
     let mut source = String::new();
     let mut elems: Vec<Elem> = Vec::with_capacity(8);
@@ -213,22 +207,12 @@ fn convert_word(chars: &[char], i: &mut usize) -> Syl {
     Syl { source, roman }
 }
 
-/// A single syllable (consonant cluster with optional explicit vowel, or a
-/// standalone vowel / other token) produced while parsing a word.
 struct Syllable {
-    /// The written romanization of the syllable's consonant component(s).
     base: String,
-    /// Explicit vowel sign appended to `base`, if any. A deleted schwa is
-    /// represented as an empty string; a retained inherent as `None`.
     explicit: Option<String>,
-    /// The word's first consonant char (for choosing the inherent vowel).
     head: char,
-    /// True if this is a bare consonant (carrying an implicit schwa) rather
-    /// than an explicit vowel, independent vowel, or dead (halant) consonant.
     inherent: bool,
-    /// True if this consonant is part of a multi-consonant conjunct cluster.
     conjunct: bool,
-    /// Fixed tokens (digits, punctuation, nasals) appended verbatim.
     tail: String,
 }
 
@@ -238,9 +222,6 @@ impl Syllable {
     }
 }
 
-/// Combine parsed elements into syllable sounds, applying conjunct rules and
-/// Bengali schwa-deletion (dropping the implicit অ vowel in predictable
-/// positions, following the `VC_CV` / word-final rules).
 fn render(elems: &[Elem]) -> String {
     let n = elems.len();
     let mut syls: Vec<Syllable> = Vec::new();
@@ -249,21 +230,18 @@ fn render(elems: &[Elem]) -> String {
     while idx < n {
         match elems[idx] {
             Elem::Consonant(_) => {
-                // Build a conjunct cluster of consonant(+halant+consonant)... .
                 let mut cluster: Vec<char> = Vec::new();
                 let mut j = idx;
                 while let Some(Elem::Consonant(c)) = elems.get(j) {
                     cluster.push(*c);
                     j += 1;
-                    // if followed by halant+consonant, continue cluster
                     match (elems.get(j), elems.get(j + 1)) {
                         (Some(Elem::Halant), Some(Elem::Consonant(_))) => {
-                            j += 1; // consume halant, next loop pushes consonant
+                            j += 1;
                         }
                         _ => break,
                     }
                 }
-                // After the cluster: halant (dead) or vowel or end.
                 let dead = matches!(elems.get(j), Some(Elem::Halant));
                 let explicit = if let Some(Elem::Vowel(m)) = elems.get(j) {
                     Some((*m).to_string())
@@ -279,7 +257,6 @@ fn render(elems: &[Elem]) -> String {
                     explicit,
                     tail: String::new(),
                 };
-                // nasals/punctuation attached after this syllable
                 let mut k = j;
                 if syl.explicit.is_some() || dead {
                     k += 1;
@@ -297,7 +274,6 @@ fn render(elems: &[Elem]) -> String {
                 }
                 syls.push(syl);
 
-                // Advance past consumed vowel/halant and any nasal marks.
                 idx = k;
             }
             Elem::Independent(v) => {
@@ -364,24 +340,12 @@ fn render(elems: &[Elem]) -> String {
     out
 }
 
-/// Apply Bengali schwa-deletion: drop the implicit অ/o vowel of bare
-/// consonants in the standard predictable positions, scanned right-to-left.
-///
-/// Rules (proper Bangla phonology, not per-word lexicon):
-///   * word-final bare consonant drops its schwa (but a final conjunct
-///     cluster keeps the o);
-///   * a mid-word schwa sandwiched between two voweled syllables (`VC_CV`)
-///     is deleted *unless* the schwa is on a rhotic (র/ড়) or the next
-///     onset is a retroflex (ট/ঠ/ড/ঢ/ণ) — those clusters are not deletable
-///     in Bangla and correspond to tatsama retention (চিরদিন, এতটা);
-///   * two consecutive schwas are never both deleted.
 fn apply_schwa_deletion(syls: &mut [Syllable]) {
     let n = syls.len();
     if n == 0 {
         return;
     }
 
-    // Find the last significant position (after trailing "other" tokens).
     let mut last_sig = n - 1;
     while last_sig > 0 && syls[last_sig].is_other() {
         last_sig -= 1;
@@ -400,11 +364,6 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
         let mut delete = false;
 
         if this == last_sig {
-            // Word-final bare consonant: drop the schwa (unless part of a
-            // conjunct cluster, which retains the final o, or the word is
-            // disyllabic and ends in ল/ট/ত/ড় which traditionally keeps its
-            // o (ভাল→bhalo, ছোট→choto, এত→eto) while longer words like
-            // সকাল→shokal delete).
             if syls[this].conjunct {
                 delete = false;
             } else {
@@ -416,7 +375,6 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
                 delete = !keep_final;
             }
         } else if !protect_from_left {
-            // `VC_CV`: mid-word schwa between a voweled left and right syllable.
             let left_vowel = i > 0 && syls[(i - 1) as usize].has_vowel();
             let right_vowel = i + 1 < n as isize && syls[(i + 1) as usize].has_vowel();
             if left_vowel && right_vowel {
@@ -425,9 +383,6 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
                 let is_rhotic = matches!(schwa_head, 'র' | '\u{09DC}' | '\u{09DD}');
                 let next_is_retroflex =
                     matches!(next_head, 'ট' | 'ঠ' | 'ড' | 'ঢ' | 'ণ' | '\u{09DC}' | '\u{09DD}');
-                // Keep (do not delete) for rhotic schwa or retroflex onset —
-                // this is the proper Bangla retention rule that makes
-                // চিরদিন→chirodin and এতটা→etota keep their o.
                 if !is_rhotic && !next_is_retroflex {
                     delete = true;
                 }
@@ -435,7 +390,6 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
         }
 
         if delete {
-            // Deleting the schwa: emit no vowel for this bare consonant.
             syls[this].explicit = Some(String::new());
             protect_from_left = true;
         } else {
@@ -446,9 +400,6 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
 }
 
 impl Syllable {
-    /// Whether this syllable currently contributes a vowel. A deleted schwa is
-    /// represented by an empty explicit; a retained inherent (explicit None,
-    /// inherent true) counts as a vowel.
     fn has_vowel(&self) -> bool {
         match &self.explicit {
             Some(v) => !v.is_empty(),
@@ -457,23 +408,16 @@ impl Syllable {
     }
 }
 
-/// Romanize a consonant cluster (2+ consonants joined by halant, or a single
-/// consonant). Applies juktakkhor (conjunct) sound rules.
 fn conjunct_roman(cluster: &[char]) -> String {
     if cluster.len() == 1 {
         return consonant(cluster[0]).unwrap_or("").to_string();
     }
 
-    // First char of word often differs, but we don't know position here; apply
-    // the common medial rules which are the majority case.
-
-    // ব (bophola) as 2nd member is silent: 1st consonant often assimilates.
     let last = cluster[cluster.len() - 1];
     if last == 'ব' && cluster.len() == 2 {
         let c1 = cluster[0];
-        // স্ত/স্ ব special: স+ব -> "sh"; else "s(b)"
         return match c1 {
-            'স' => "sh".to_string(), // স্ব -> sh
+            'স' => "sh".to_string(),
             _ => {
                 let b1 = consonant(c1).unwrap_or("").to_string();
                 let doubled = double_consonant(c1);
@@ -486,7 +430,6 @@ fn conjunct_roman(cluster: &[char]) -> String {
         };
     }
 
-    // ম (mophola) as 2nd member: silent, doubles 1st.
     if last == 'ম' {
         let d = double_consonant(cluster[0]);
         if !d.is_empty() {
@@ -494,7 +437,6 @@ fn conjunct_roman(cluster: &[char]) -> String {
         }
     }
 
-    // য় (yophola) as 2nd member: silent, doubles 1st (for্য).
     if last == '\u{09DF}' || (last == 'য' && cluster.len() == 2) {
         let d = double_consonant(cluster[0]);
         if !d.is_empty() {
@@ -502,13 +444,10 @@ fn conjunct_roman(cluster: &[char]) -> String {
         }
     }
 
-    // চ+ছ (cch) conjunct: the first 'h' is dropped -> "cch".
     if cluster.len() == 2 && cluster[0] == 'চ' && cluster[1] == 'ছ' {
         return "cch".to_string();
     }
 
-    // first char of word often differs, but we don't know position here; apply
-    // cluster name (internal vowels usually o).
     let mut out = String::new();
     for &c in cluster {
         out.push_str(consonant(c).unwrap_or(""));
@@ -557,7 +496,6 @@ fn inherent_mid(c: char) -> &'static str {
     }
 }
 
-/// Returns the consonant's base romanization.
 fn consonant(c: char) -> Option<&'static str> {
     let v = match c {
         'ক' => "k",
@@ -592,9 +530,9 @@ fn consonant(c: char) -> Option<&'static str> {
         'ষ' => "sh",
         'স' => "s",
         'হ' => "h",
-        '\u{09DC}' => "r",   // ড়
-        '\u{09DD}' => "rh",  // ঢ়
-        '\u{09DF}' => "y",   // য়
+        '\u{09DC}' => "r",
+        '\u{09DD}' => "rh",
+        '\u{09DF}' => "y",
         'ৎ' => "t",
         _ => return None,
     };
@@ -614,7 +552,7 @@ fn independent(c: char) -> Option<&'static str> {
         'ঐ' => "oi",
         'ও' => "o",
         'ঔ' => "ou",
-        '\u{09CF}' => "e", // অ্যা
+        '\u{09CF}' => "e",
         _ => return None,
     };
     Some(v)

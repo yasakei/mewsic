@@ -1,18 +1,7 @@
 use std::collections::HashMap;
 
-/// Data-driven lexicon of Bangla words -> modern romanization.
-///
-/// This is the heart of bntomew. Instead of applying strict rule-based
-/// transcription (which modern Bangla speakers ignore), we map whole words to
-/// the romanized spelling the current generation actually uses. This covers:
-///   - Borrowed words whose Latin/English form is kept (টেবিল -> table)
-///   - Common Bangla words where modern spelling differs from strict rules
-///   - Words whose conjunct-final vowel is retained (রাষ্ট্র -> rashtro)
-///
-/// Unknown words are handled by the syllable engine in `convert.rs`.
 pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
     let pairs: &[(&str, &str)] = &[
-        // --- Borrowed / English-form words ---
         ("টেবিল", "table"),
         ("স্কুল", "school"),
         ("চেয়ার", "chair"),
@@ -90,7 +79,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("পড়াশোনা", "porashona"),
         ("ইংরেজি", "english"),
         ("ভাষা", "bhasha"),
-        // --- Core vocabulary (modern romanization) ---
         ("বাংলা", "bangla"),
         ("বাংলাদেশ", "bangladesh"),
         ("ব্যক্তি", "bekti"),
@@ -223,7 +211,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("পুরুষ", "purush"),
         ("বন্ধু", "bondhu"),
         ("বান্ধবী", "bandhobi"),
-        // house / life
         ("বাড়ি", "bari"),
         ("ঘর", "ghor"),
         ("রান্নাঘর", "rannaghor"),
@@ -250,7 +237,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("রুপা", "rupa"),
         ("লোহা", "loha"),
         ("পাথর", "pathor"),
-        // body
         ("মাথা", "matha"),
         ("চুল", "chul"),
         ("চোখ", "chokh"),
@@ -278,7 +264,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("রক্ত", "rokto"),
         ("হাড়", "har"),
         ("চামড়া", "chamra"),
-        // actions / feelings
         ("ভালোবাসা", "bhalobasha"),
         ("ভালোবাসি", "bhalobashi"),
         ("ভালো", "bhalo"),
@@ -320,7 +305,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("জন্ম", "jonmo"),
         ("বিবাহ", "bibaho"),
         ("বিয়ে", "biye"),
-        // numbers
         ("এক", "ek"),
         ("দুই", "dui"),
         ("তিন", "tin"),
@@ -334,7 +318,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("শত", "shot"),
         ("হাজার", "hajar"),
         ("লক্ষ", "lokh"),
-        // time / misc function words
         ("দিন", "din"),
         ("রাত", "rat"),
         ("সকাল", "shokal"),
@@ -399,7 +382,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("শক্ত", "shokto"),
         ("ভিজে", "vije"),
         ("শুকনো", "shukhno"),
-        // sentences / phrases
         ("ধন্যবাদ", "dhonnobad"),
         ("আসসালামু আলাইকুম", "assalamu alaikum"),
         ("কেমন আছেন", "kemon achen"),
@@ -420,7 +402,6 @@ pub(crate) fn lexicon() -> HashMap<&'static str, &'static str> {
         ("ধর্ম", "dhormo"),
         ("পৃথিবী", "prithibi"),
         ("সৃষ্টি", "shrishti"),
-        // --- Irregular conjunct (juktakkhor) words ---
         ("কর্তব্য", "kortobbo"),
         ("ব্রাহ্মণ", "brammon"),
         ("ভাল", "bhalo"),

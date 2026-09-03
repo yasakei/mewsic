@@ -2,6 +2,6 @@
 name = "bntomew"
 version = "0.1.0"
 edition = "2021"
-description = "bntomew — modern banglish transformation for Bengali. Transliterates Bengali script into the romanized form used by today's generation."
+description = "Modern banglish transformation for Bengali. Transliterates Bengali script into the romanized form used by the current generation."
 authors = ["Yasakei"]
 license = "MIT"
