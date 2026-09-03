@@ -1384,11 +1384,17 @@ fn poll_remote_shortcut(ctx: &AppContext) -> bool {
                 if is_ctrl_c(&k) {
                     return true;
                 }
-                if k.code == KeyCode::Char('s')
+                if matches!(k.code, KeyCode::Char('s') | KeyCode::Char('S'))
                     && k.modifiers.contains(KeyModifiers::CONTROL)
                     && run_settings_editor(ctx).is_some()
                 {
                     push_remote_settings(ctx);
+                }
+                if matches!(k.code, KeyCode::Char('b') | KeyCode::Char('B'))
+                    && k.modifiers.contains(KeyModifiers::CONTROL)
+                    && crate::web::start(ctx)
+                {
+                    crate::web::open_browser();
                 }
                 false
             }
@@ -1423,11 +1429,16 @@ pub fn poll_shortcut(ctx: &AppContext) -> bool {
                         return true;
                     }
                     match k.code {
-                        KeyCode::Char('s') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                        KeyCode::Char('s') | KeyCode::Char('S')
+                            if k.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
                             let _ = run_settings_editor(ctx);
                         }
-                        KeyCode::Char('b') if k.modifiers.contains(KeyModifiers::CONTROL) => {
-                            crate::web::start(ctx);
+                        KeyCode::Char('b') | KeyCode::Char('B')
+                            if k.modifiers.contains(KeyModifiers::CONTROL)
+                                && crate::web::start(ctx) =>
+                        {
+                            crate::web::open_browser();
                         }
                         _ => {}
                     }

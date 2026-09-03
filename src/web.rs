@@ -19,6 +19,36 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 
 const PANEL_HTML: &str = include_str!("../static/panel.html");
 
+pub fn open_browser() {
+    // OS-specific handler via `opener` (xdg-open/open/start) — best-effort, no crash on headless
+    let url = PANEL_URL;
+    if opener::open(url).is_err() {
+        // Fallback manual OS handlers if opener fails (e.g. minimal container)
+        #[cfg(target_os = "linux")]
+        {
+            let _ = std::process::Command::new("xdg-open")
+                .arg(url)
+                .spawn()
+                .or_else(|_| std::process::Command::new("gio").arg("open").arg(url).spawn())
+                .or_else(|_| std::process::Command::new("sensible-browser").arg(url).spawn());
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("open").arg(url).spawn();
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "start", "", url])
+                .spawn();
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+        }
+    }
+}
+
 pub fn start(ctx: &AppContext) -> bool {
     if RUNNING.swap(true, Ordering::SeqCst) {
         return true;
