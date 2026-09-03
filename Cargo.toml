@@ -48,3 +48,11 @@ vendor = "Yasakei"
 assets = [
     { source = "target/release/mewsic", dest = "/usr/bin/mewsic", mode = "755" },
 ]
+
+[package.metadata.wix]
+upgrade-guid = "252820C1-09D2-40D9-97B0-555B35BE4D0C"
+path-guid = "50097253-D378-46ED-A68D-D764F442CD25"
+license = false
+eula = false
+install-scope = "perUser"
+# per-user avoids admin + HKLM PATH (less Wacapew) — installs to %LOCALAPPDATA%
