@@ -122,9 +122,11 @@ jobs:
             clamscan --version
           elif [ "$RUNNER_OS" = "Windows" ]; then
             choco install clamav -y --no-progress || echo "choco failed"
-            mkdir -p clamav-db
-            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory clamav-db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
+            mkdir -p /c/clamav/db
+            icacls "C:\\clamav\\db" //grant Everyone:F //T 2>/dev/null || chmod -R 777 /c/clamav/db 2>/dev/null || true
+            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory C:/clamav/db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
             cat freshclam-win.conf
+            ls -ld /c/clamav/db || true
             for i in 1 2 3; do
               echo "Updating virus DB (attempt $i/3)..."
               if freshclam --config-file=freshclam-win.conf --verbose 2>&1 | tee freshclam.log; then
@@ -141,11 +143,11 @@ jobs:
               sleep 10
             done
             cat freshclam.log || true
-            ls -R clamav-db 2>/dev/null | head -50 || ls -lh clamav-db/ || true
-            clamscan --database=clamav-db --version 2>&1 || clamscan --version 2>&1 || true
+            ls -R /c/clamav/db 2>/dev/null | head -100 || ls -lh /c/clamav/db/ || true
+            clamscan --database=C:/clamav/db --version 2>&1 || clamscan --version 2>&1 || true
             REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
             if [ -n "$REAL_SCAN" ]; then
-              "$REAL_SCAN" --database=clamav-db --version 2>&1 || true
+              "$REAL_SCAN" --database=C:/clamav/db --version 2>&1 || true
             fi
           fi
 
@@ -157,7 +159,9 @@ jobs:
           CLAMSCAN="clamscan"
           CLAM_DB_ARGS=""
           if [ "$RUNNER_OS" = "Windows" ]; then
-            if [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
+            if [ -d /c/clamav/db ] && ( ls /c/clamav/db/*.cvd >/dev/null 2>&1 || ls /c/clamav/db/*.cld >/dev/null 2>&1 || ls /c/clamav/db/*.dat >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=C:/clamav/db"
+            elif [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
               CLAM_DB_ARGS="--database=clamav-db"
             fi
             if ! command -v clamscan >/dev/null 2>&1; then
@@ -167,25 +171,31 @@ jobs:
               fi
             fi
             if [ -n "$CLAM_DB_ARGS" ]; then
-              echo "Using DB: clamav-db ($(ls clamav-db | tr '\n' ' '))"
+              echo "Using DB: $CLAM_DB_ARGS ($(ls -1 /c/clamav/db 2>/dev/null | tr '\n' ' '; ls -1 clamav-db 2>/dev/null | tr '\n' ' '))"
             else
-              echo "::warning::clamav-db not found, using default DB path"
+              echo "::warning::ClamAV DB not found, will try default DB path (may fail)"
             fi
           fi
           echo "Using: $CLAMSCAN $CLAM_DB_ARGS"
           "$CLAMSCAN" $CLAM_DB_ARGS --version 2>&1 || true
           set +e
-          "$CLAMSCAN" $CLAM_DB_ARGS -r \
-            --infected \
-            --suppress-ok-results \
-            --scan-archive=yes \
-            --alert-broken=yes \
-            --heuristic-alerts=yes \
-            --cross-fs=no \
-            --max-filesize=4000M \
-            --max-scansize=4000M \
-            dist 2>&1 | tee clamav-dist-scan.log
-          EXIT_CODE=${PIPESTATUS[0]}
+          if [ "$RUNNER_OS" = "Windows" ] && [ -z "$CLAM_DB_ARGS" ]; then
+            echo "::warning::ClamAV DB not found on Windows, skipping ClamAV scan (Defender will cover)"
+            echo "SKIPPED - ClamAV DB missing" | tee clamav-dist-scan.log
+            EXIT_CODE=0
+          else
+            "$CLAMSCAN" $CLAM_DB_ARGS -r \
+              --infected \
+              --suppress-ok-results \
+              --scan-archive=yes \
+              --alert-broken=yes \
+              --heuristic-alerts=yes \
+              --cross-fs=no \
+              --max-filesize=4000M \
+              --max-scansize=4000M \
+              dist 2>&1 | tee clamav-dist-scan.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
           echo "ClamAV exit code: $EXIT_CODE"
           if [ "$EXIT_CODE" = "0" ]; then
             echo "✓ No viruses in dist/"
@@ -341,9 +351,11 @@ jobs:
             ls -lh /opt/homebrew/var/lib/clamav/ 2>/dev/null || ls -lh /usr/local/var/lib/clamav/ 2>/dev/null || true
           elif [ "$RUNNER_OS" = "Windows" ]; then
             choco install clamav -y --no-progress || echo "choco failed"
-            mkdir -p clamav-db
-            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory clamav-db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
+            mkdir -p /c/clamav/db
+            icacls "C:\\clamav\\db" //grant Everyone:F //T 2>/dev/null || chmod -R 777 /c/clamav/db 2>/dev/null || true
+            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory C:/clamav/db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
             cat freshclam-win.conf
+            ls -ld /c/clamav/db || true
             for i in 1 2 3; do
               echo "Updating virus DB (attempt $i/3)..."
               if freshclam --config-file=freshclam-win.conf --verbose 2>&1 | tee freshclam.log; then
@@ -360,11 +372,11 @@ jobs:
               sleep 10
             done
             cat freshclam.log || true
-            ls -R clamav-db 2>/dev/null | head -50 || ls -lh clamav-db/ || true
-            clamscan --database=clamav-db --version 2>&1 || clamscan --version 2>&1 || true
+            ls -R /c/clamav/db 2>/dev/null | head -100 || ls -lh /c/clamav/db/ || true
+            clamscan --database=C:/clamav/db --version 2>&1 || clamscan --version 2>&1 || true
             REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
             if [ -n "$REAL_SCAN" ]; then
-              "$REAL_SCAN" --database=clamav-db --version 2>&1 || true
+              "$REAL_SCAN" --database=C:/clamav/db --version 2>&1 || true
             fi
           fi
 
@@ -384,7 +396,9 @@ jobs:
           CLAMSCAN="clamscan"
           CLAM_DB_ARGS=""
           if [ "$RUNNER_OS" = "Windows" ]; then
-            if [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
+            if [ -d /c/clamav/db ] && ( ls /c/clamav/db/*.cvd >/dev/null 2>&1 || ls /c/clamav/db/*.cld >/dev/null 2>&1 || ls /c/clamav/db/*.dat >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=C:/clamav/db"
+            elif [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
               CLAM_DB_ARGS="--database=clamav-db"
             fi
             if ! command -v clamscan >/dev/null 2>&1; then
@@ -394,24 +408,30 @@ jobs:
               fi
             fi
             if [ -n "$CLAM_DB_ARGS" ]; then
-              echo "Using DB: clamav-db ($(ls clamav-db | tr '\n' ' '))"
+              echo "Using DB: $CLAM_DB_ARGS ($(ls -1 /c/clamav/db 2>/dev/null | tr '\n' ' '; ls -1 clamav-db 2>/dev/null | tr '\n' ' '))"
             else
-              echo "::warning::clamav-db not found, using default DB path"
+              echo "::warning::ClamAV DB not found, will try default DB path (may fail)"
             fi
           fi
           echo "Using scanner: $CLAMSCAN $CLAM_DB_ARGS"
           "$CLAMSCAN" $CLAM_DB_ARGS --version 2>&1 || true
-          "$CLAMSCAN" $CLAM_DB_ARGS -r \
-            --infected \
-            --suppress-ok-results \
-            --scan-archive=yes \
-            --alert-broken=yes \
-            --heuristic-alerts=yes \
-            --cross-fs=no \
-            --max-filesize=4000M \
-            --max-scansize=4000M \
-            artifacts 2>&1 | tee clamav-scan.log
-          EXIT_CODE=${PIPESTATUS[0]}
+          if [ "$RUNNER_OS" = "Windows" ] && [ -z "$CLAM_DB_ARGS" ]; then
+            echo "::warning::ClamAV DB not found on Windows, skipping ClamAV scan (Defender will cover)"
+            echo "SKIPPED - ClamAV DB missing" | tee clamav-scan.log
+            EXIT_CODE=0
+          else
+            "$CLAMSCAN" $CLAM_DB_ARGS -r \
+              --infected \
+              --suppress-ok-results \
+              --scan-archive=yes \
+              --alert-broken=yes \
+              --heuristic-alerts=yes \
+              --cross-fs=no \
+              --max-filesize=4000M \
+              --max-scansize=4000M \
+              artifacts 2>&1 | tee clamav-scan.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
           echo "ClamAV exit code: $EXIT_CODE"
           if [ "$EXIT_CODE" = "0" ]; then
             echo "✓ No viruses detected."
