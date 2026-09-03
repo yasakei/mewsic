@@ -81,23 +81,40 @@ jobs:
             clamscan --version
             ls -lh /opt/homebrew/var/lib/clamav/ 2>/dev/null || ls -lh /usr/local/var/lib/clamav/ 2>/dev/null || ls -lh /var/lib/clamav/ || true
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            choco install clamav -y --no-progress || echo "clamav choco install failed"
-            echo "C:/Program Files/ClamAV" >> "$GITHUB_PATH" || true
-            echo "C:/Program Files (x86)/ClamAV" >> "$GITHUB_PATH" || true
-            export PATH="$PATH:/c/Program Files/ClamAV:/c/Program Files (x86)/ClamAV"
+            choco install clamav -y --no-progress || echo "choco clamav failed"
+            mkdir -p clamav-db
+            cat > freshclam-win.conf <<'EOF'
+            DatabaseMirror database.clamav.net
+            DatabaseMirror clamav.easynet.fr
+            DatabaseDirectory clamav-db
+            MaxAttempts 3
+            ScriptedUpdates yes
+            CompressLocalDatabase yes
+            Bytecode yes
+            EOF
+            cat freshclam-win.conf
             for i in 1 2 3; do
               echo "Updating virus database (attempt $i/3)..."
-              if freshclam --verbose 2>&1 | tee freshclam.log; then
+              if freshclam --config-file=freshclam-win.conf --verbose 2>&1 | tee freshclam.log; then
+                echo "freshclam success"
                 break
               fi
-              if "/c/Program Files/ClamAV/freshclam.exe" --verbose 2>&1 | tee -a freshclam.log; then
-                break
+              REAL_FRESH=$(find /c/ProgramData/chocolatey -name "freshclam.exe" -type f 2>/dev/null | head -1)
+              if [ -n "$REAL_FRESH" ] && [ -f "$REAL_FRESH" ]; then
+                echo "Trying real freshclam: $REAL_FRESH"
+                if "$REAL_FRESH" --config-file="$(pwd)/freshclam-win.conf" --verbose 2>&1 | tee -a freshclam.log; then
+                  break
+                fi
               fi
               sleep 10
             done
             cat freshclam.log || true
-            clamscan --version || "/c/Program Files/ClamAV/clamscan.exe" --version || true
-            ls -lh "/c/Program Files/ClamAV/db" 2>/dev/null || ls -lh "/c/ProgramData/ClamAV/db" 2>/dev/null || true
+            ls -R clamav-db 2>/dev/null | head -50 || ls -lh clamav-db/ || true
+            clamscan --database=clamav-db --version 2>&1 || clamscan --version 2>&1 || true
+            REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
+            if [ -n "$REAL_SCAN" ]; then
+              "$REAL_SCAN" --database=clamav-db --version 2>&1 || true
+            fi
           fi
 
       - name: Virus scan (ClamAV)
@@ -106,16 +123,28 @@ jobs:
           echo "Scanning build artifacts on $RUNNER_OS..."
           set +e
           CLAMSCAN="clamscan"
-          if [ "$RUNNER_OS" = "Windows" ] && ! command -v clamscan >/dev/null 2>&1; then
-            if [ -f "/c/Program Files/ClamAV/clamscan.exe" ]; then
-              CLAMSCAN="/c/Program Files/ClamAV/clamscan.exe"
-            elif [ -f "/c/Program Files (x86)/ClamAV/clamscan.exe" ]; then
-              CLAMSCAN="/c/Program Files (x86)/ClamAV/clamscan.exe"
+          CLAM_DB_ARGS=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=clamav-db"
+            fi
+            if ! command -v clamscan >/dev/null 2>&1; then
+              REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
+              if [ -n "$REAL_SCAN" ] && [ -f "$REAL_SCAN" ]; then
+                CLAMSCAN="$REAL_SCAN"
+              fi
+            fi
+            # need DB arg for clamscan on Windows
+            if [ -n "$CLAM_DB_ARGS" ]; then
+              echo "Using DB: clamav-db ($(ls clamav-db | tr '\n' ' '))"
+            else
+              echo "::warning::clamav-db not found, using default DB path"
             fi
           fi
-          echo "Using scanner: $CLAMSCAN"
-          "$CLAMSCAN" --version || true
-          "$CLAMSCAN" -r \
+          echo "Using scanner: $CLAMSCAN $CLAM_DB_ARGS"
+          "$CLAMSCAN" $CLAM_DB_ARGS --version 2>&1 || true
+          # single pipeline so PIPESTATUS[0] is reliable
+          "$CLAMSCAN" $CLAM_DB_ARGS -r \
             --infected \
             --suppress-ok-results \
             --scan-archive=yes \
