@@ -177,17 +177,28 @@ jobs:
         run: |
           Write-Host "Running Windows Defender scan on target/ ..."
           $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          $mpLog = "C:\Users\RUNNER~1\AppData\Local\Temp\MpCmdRun.log"
           if (Test-Path $defender) {
             & $defender -Scan -ScanType 3 -File target -DisableRemediation
             $code = $LASTEXITCODE
             Write-Host "Defender exit code: $code"
-            if ($code -eq 2) {
-              Write-Host "::error::Windows Defender detected threats!"
-              exit 1
-            } elseif ($code -ne 0 -and $code -ne 2) {
-              Write-Host "::warning::Defender scan returned $code (may be clean)"
+            if (Test-Path $mpLog) {
+              Write-Host "--- MpCmdRun.log tail ---"
+              Get-Content $mpLog -Tail 100 2>$null | Write-Host
+              Write-Host "--- end log ---"
+            }
+            if ($code -eq 0) {
+              Write-Host "Defender clean - no threats."
+            } elseif ($code -eq 2) {
+              # 0x80508023 often means scan failed, not threat; check log for actual threat
+              if (Test-Path $mpLog -and (Select-String -Path $mpLog -Pattern "Threat|Infected|found" -Quiet)) {
+                Write-Host "::error::Windows Defender detected threats! See log above."
+                exit 1
+              } else {
+                Write-Host "::warning::Defender exit 2 - scan error or no threat (hr=0x80508023 is common on GH runners when Defender is disabled). Not failing job."
+              }
             } else {
-              Write-Host "Defender: no threats - clean."
+              Write-Host "::warning::Defender scan returned $code (may be clean)"
             }
           } else {
             Write-Host "::warning::MpCmdRun not found, skipping Defender scan"

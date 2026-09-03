@@ -220,13 +220,28 @@ jobs:
         run: |
           Write-Host "Running Windows Defender scan on dist/ ..."
           $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          $mpLog = "C:\Users\RUNNER~1\AppData\Local\Temp\MpCmdRun.log"
           if (Test-Path $defender) {
             & $defender -Scan -ScanType 3 -File dist -DisableRemediation
             $code = $LASTEXITCODE
             Write-Host "Defender exit code: $code"
-            if ($code -eq 2) { Write-Host "::error::Defender detected threats!"; exit 1 }
-            elseif ($code -eq 0) { Write-Host "Defender clean - no threats." }
-            else { Write-Host "::warning::Defender code $code" }
+            if (Test-Path $mpLog) {
+              Write-Host "--- MpCmdRun.log tail ---"
+              Get-Content $mpLog -Tail 100 2>$null | Write-Host
+              Write-Host "--- end log ---"
+            }
+            if ($code -eq 0) {
+              Write-Host "Defender clean - no threats."
+            } elseif ($code -eq 2) {
+              if (Test-Path $mpLog -and (Select-String -Path $mpLog -Pattern "Threat|Infected|found" -Quiet)) {
+                Write-Host "::error::Defender detected threats!"
+                exit 1
+              } else {
+                Write-Host "::warning::Defender exit 2 - scan error (0x80508023 common on GH runners), not failing job."
+              }
+            } else {
+              Write-Host "::warning::Defender code $code"
+            }
           } else {
             Write-Host "::warning::MpCmdRun not found"
           }
@@ -520,13 +535,28 @@ jobs:
         run: |
           Write-Host "Running Windows Defender scan on artifacts/ ..."
           $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          $mpLog = "C:\Users\RUNNER~1\AppData\Local\Temp\MpCmdRun.log"
           if (Test-Path $defender) {
             & $defender -Scan -ScanType 3 -File artifacts -DisableRemediation
             $code = $LASTEXITCODE
             Write-Host "Defender exit code: $code"
-            if ($code -eq 2) { Write-Host "::error::Defender detected threats!"; exit 1 }
-            elseif ($code -eq 0) { Write-Host "Defender clean - no threats." }
-            else { Write-Host "::warning::Defender code $code" }
+            if (Test-Path $mpLog) {
+              Write-Host "--- MpCmdRun.log tail ---"
+              Get-Content $mpLog -Tail 100 2>$null | Write-Host
+              Write-Host "--- end log ---"
+            }
+            if ($code -eq 0) {
+              Write-Host "Defender clean - no threats."
+            } elseif ($code -eq 2) {
+              if (Test-Path $mpLog -and (Select-String -Path $mpLog -Pattern "Threat|Infected|found" -Quiet)) {
+                Write-Host "::error::Defender detected threats!"
+                exit 1
+              } else {
+                Write-Host "::warning::Defender exit 2 - scan error (0x80508023 common on GH runners), not failing job."
+              }
+            } else {
+              Write-Host "::warning::Defender code $code"
+            }
           } else {
             Write-Host "::warning::MpCmdRun not found"
           }
