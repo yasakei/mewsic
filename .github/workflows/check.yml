@@ -35,3 +35,61 @@ jobs:
 
       - name: Clippy (warnings denied)
         run: cargo clippy --all-targets -- -D warnings
+
+      - name: Install ClamAV (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav
+          sudo systemctl stop clamav-freshclam || true
+          sudo rm -f /var/log/clamav/freshclam.log
+          for i in 1 2 3; do
+            echo "Updating virus database (attempt $i/3)..."
+            if sudo freshclam --verbose; then
+              echo "Database updated successfully."
+              break
+            fi
+            echo "freshclam failed, retrying in 10s..."
+            sleep 10
+            if [ "$i" = "3" ]; then
+              echo "::warning::Failed to update ClamAV database after 3 attempts, using existing DB if available."
+            fi
+          done
+          clamscan --version
+          ls -lh /var/lib/clamav/ || true
+
+      - name: Virus scan (ClamAV)
+        if: runner.os == 'Linux'
+        run: |
+          echo "Scanning build artifacts for viruses..."
+          set +e
+          clamscan -r \
+            --infected \
+            --suppress-ok-results \
+            --scan-archive=yes \
+            --alert-broken=yes \
+            --heuristic-alerts=yes \
+            --cross-fs=no \
+            --max-filesize=4000M \
+            --max-scansize=4000M \
+            target 2>&1 | tee clamav-scan.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "ClamAV exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "✓ No viruses detected in build artifacts."
+          elif [ "$EXIT_CODE" = "1" ]; then
+            echo "::error::Virus detected in build artifacts! See log above."
+            exit 1
+          else
+            echo "::error::ClamAV scan failed with exit code $EXIT_CODE"
+            cat clamav-scan.log
+            exit 1
+          fi
+
+      - name: Upload ClamAV scan report
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clamav-scan-report-${{ matrix.os }}
+          path: clamav-scan.log
+          if-no-files-found: warn
