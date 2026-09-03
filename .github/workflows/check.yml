@@ -83,15 +83,7 @@ jobs:
           elif [ "$RUNNER_OS" = "Windows" ]; then
             choco install clamav -y --no-progress || echo "choco clamav failed"
             mkdir -p clamav-db
-            cat > freshclam-win.conf <<'EOF'
-            DatabaseMirror database.clamav.net
-            DatabaseMirror clamav.easynet.fr
-            DatabaseDirectory clamav-db
-            MaxAttempts 3
-            ScriptedUpdates yes
-            CompressLocalDatabase yes
-            Bytecode yes
-            EOF
+            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory clamav-db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
             cat freshclam-win.conf
             for i in 1 2 3; do
               echo "Updating virus database (attempt $i/3)..."
