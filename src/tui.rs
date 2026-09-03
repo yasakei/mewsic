@@ -1295,7 +1295,7 @@ pub fn run_remote_dashboard(ctx: &AppContext, _pid: u32) {
         if poll_remote_shortcut(ctx) {
             break;
         }
-        if let Ok(response) = crate::net::agent()
+        if let Ok(response) = crate::net::local_agent()
             .get("http://127.0.0.1:8999/api/state")
             .timeout(Duration::from_secs(1))
             .call()
@@ -1409,7 +1409,7 @@ fn push_remote_settings(ctx: &AppContext) {
     let Ok(body) = serde_json::to_string(&settings) else {
         return;
     };
-    let _ = crate::net::agent()
+    let _ = crate::net::local_agent()
         .post("http://127.0.0.1:8999/api/settings")
         .timeout(Duration::from_secs(2))
         .set("Content-Type", "application/json")

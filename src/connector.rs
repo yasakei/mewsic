@@ -23,7 +23,7 @@ pub struct PlayerState {
 
 pub fn fetch_spotify_token(discord_token: &str) -> Result<String, FetchError> {
     let url = format!("{DISCORD_API}/users/@me/connections");
-    let resp = net::agent()
+    let resp = net::discord_agent()
         .get(&url)
         .set("Authorization", discord_token)
         .call()
@@ -54,7 +54,7 @@ pub fn fetch_spotify_token(discord_token: &str) -> Result<String, FetchError> {
 
 pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchError> {
     let url = format!("{SPOTIFY_API}/me/player");
-    let resp = net::agent()
+    let resp = net::spotify_agent()
         .get(&url)
         .set("Authorization", &format!("Bearer {spotify_token}"))
         .call()
@@ -135,7 +135,7 @@ pub fn patch_status(discord_token: &str, text: &str, emoji: &str) -> Result<(), 
         }
     });
 
-    net::agent()
+    net::discord_agent()
         .patch(&url)
         .set("Authorization", discord_token)
         .set("Content-Type", "application/json")
@@ -150,7 +150,7 @@ pub fn patch_status(discord_token: &str, text: &str, emoji: &str) -> Result<(), 
 
 pub fn validate_token(token: &str) -> bool {
     let url = format!("{DISCORD_API}/users/@me");
-    net::agent()
+    net::discord_agent()
         .get(&url)
         .set("Authorization", token)
         .call()
