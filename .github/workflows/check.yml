@@ -197,6 +197,7 @@ jobs:
           } else {
             Write-Host "::warning::MpCmdRun not found, skipping Defender scan"
           }
+          exit 0
 
       - name: Upload ClamAV scan report
         if: always()

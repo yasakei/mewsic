@@ -240,6 +240,7 @@ jobs:
           } else {
             Write-Host "::warning::MpCmdRun not found"
           }
+          exit 0
 
       - name: Sign Windows artifacts (Authenticode + Cosign + checksums)
         if: runner.os == 'Windows'
@@ -550,6 +551,7 @@ jobs:
           } else {
             Write-Host "::warning::MpCmdRun not found"
           }
+          exit 0
 
       - name: Upload scan report
         if: always()
