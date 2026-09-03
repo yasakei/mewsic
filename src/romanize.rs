@@ -39,6 +39,30 @@ pub fn romanize(text: &str) -> String {
             continue;
         }
 
+        if is_bengali(c) {
+            // Bengali is transliterated by bntomew (modern banglish), which
+            // replaces the generic Indic abugida table below.
+            let start = i;
+            while i < chars.len() && is_bengali(chars[i]) {
+                i += 1;
+            }
+            let segment: &str =
+                &text[chars_to_byte_offset(text, start)..chars_to_byte_offset(text, i)];
+            out.push_str(&bntomew::transliterate(segment).romanized);
+            continue;
+        }
+
+        if is_arabic(c) {
+            let start = i;
+            while i < chars.len() && is_arabic(chars[i]) {
+                i += 1;
+            }
+            let segment: &str =
+                &text[chars_to_byte_offset(text, start)..chars_to_byte_offset(text, i)];
+            out.push_str(&any_ascii::any_ascii(segment));
+            continue;
+        }
+
         if let Some(ab) = table.abugida_for(c) {
             let start = i;
             while i < chars.len() && ab.word_char(chars[i]) {
@@ -48,9 +72,14 @@ pub fn romanize(text: &str) -> String {
             continue;
         }
 
-        if let Some(hangul) = hangul_syllable(c) {
-            out.push_str(&hangul);
-            i += 1;
+        if is_hangul(c) {
+            let start = i;
+            while i < chars.len() && is_hangul(chars[i]) {
+                i += 1;
+            }
+            let segment: &str =
+                &text[chars_to_byte_offset(text, start)..chars_to_byte_offset(text, i)];
+            out.push_str(&any_ascii::any_ascii(segment).to_lowercase());
             continue;
         }
 
@@ -76,6 +105,27 @@ fn is_cjk(c: char) -> bool {
 
 fn is_japanese(c: char) -> bool {
     is_kana(c) || is_cjk(c) || matches!(c, '々' | '〆' | '〇')
+}
+
+fn is_bengali(c: char) -> bool {
+    let code = c as u32;
+    (0x0980..=0x09FF).contains(&code)
+}
+
+fn is_arabic(c: char) -> bool {
+    let code = c as u32;
+    matches!(
+        code,
+        0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF
+    )
+}
+
+fn is_hangul(c: char) -> bool {
+    let code = c as u32;
+    matches!(
+        code,
+        0xAC00..=0xD7A3 | 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xD7B0..=0xD7FF
+    )
 }
 
 fn chars_to_byte_offset(s: &str, char_idx: usize) -> usize {
@@ -479,34 +529,6 @@ impl Abugida {
     }
 }
 
-const CHOSEONG: [&str; 19] = [
-    "g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p",
-    "h",
-];
-const JUNGSEONG: [&str; 21] = [
-    "a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we",
-    "wi", "yu", "eu", "ui", "i",
-];
-const JONGSEONG: [&str; 28] = [
-    "", "k", "k", "k", "n", "n", "n", "t", "l", "l", "l", "l", "l", "l", "l", "l", "m", "p", "p",
-    "t", "t", "ng", "t", "t", "t", "t", "t", "t",
-];
-
-fn hangul_syllable(c: char) -> Option<String> {
-    let code = c as u32;
-    if !(0xAC00..=0xD7A3).contains(&code) {
-        return None;
-    }
-    let s = code - 0xAC00;
-    let cho = (s / 588) as usize;
-    let jung = ((s % 588) / 28) as usize;
-    let jong = (s % 28) as usize;
-    Some(format!(
-        "{}{}{}",
-        CHOSEONG[cho], JUNGSEONG[jung], JONGSEONG[jong]
-    ))
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Vowel {
     Inherent,
@@ -759,10 +781,11 @@ mod tests {
 
     #[test]
     fn korean_hangul() {
+        // Korean now via `any_ascii` per user request
         assert_eq!(romanize("안녕하세요"), "annyeonghaseyo");
-        assert_eq!(romanize("사랑해"), "saranghae");
+        assert_eq!(romanize("사랑해"), "salanghae");
         assert_eq!(romanize("감사"), "gamsa");
-        assert_eq!(romanize("한국"), "hanguk");
+        assert_eq!(romanize("한국"), "hangug");
     }
 
     #[test]
@@ -781,8 +804,9 @@ mod tests {
 
     #[test]
     fn arabic_letters() {
-        assert_eq!(romanize("كتاب"), "ktab");
-        assert_eq!(romanize("سلام"), "slam");
+        // Arabic now uses `any_ascii` per https://crates.io/crates/any_ascii/0.1.2
+        assert_eq!(romanize("كتاب"), "ktb");
+        assert_eq!(romanize("سلام"), "slm");
     }
 
     #[test]
@@ -824,7 +848,7 @@ mod tests {
     fn bengali_words() {
         assert_eq!(romanize("বাংলা"), "bangla");
         assert_eq!(romanize("ধন্যবাদ"), "dhonnobad");
-        assert_eq!(romanize("ভালোবাসা"), "bhalobasa");
+        assert_eq!(romanize("ভালোবাসা"), "bhalobasha");
         assert_eq!(romanize("শব্দ"), "shobdo");
         assert_eq!(romanize("স্বপ্ন"), "shopno");
         assert_eq!(romanize("বাংলাদেশ"), "bangladesh");
@@ -832,6 +856,7 @@ mod tests {
         assert_eq!(romanize("খুঁজে"), "khuje");
         assert_eq!(romanize("সমুদ্র"), "somudro");
         assert_eq!(romanize("কখন"), "kokhon");
+        assert_eq!(romanize("বাস"), "bus");
     }
 
     #[test]
@@ -879,17 +904,14 @@ mod tests {
     #[test]
     fn builtin_table_loads_from_toml() {
         let table = Table::builtin();
-        assert!(table.charts.len() >= 3);
-        assert_eq!(table.abugidas.len(), 3);
+        // Arabic now handled by `any_ascii` (https://crates.io/crates/any_ascii/0.1.2), not a chart
+        assert!(table.charts.len() >= 2);
+        assert_eq!(table.abugidas.len(), 2);
         assert_eq!(table.chart_map('а').as_deref(), Some("a"));
         assert_eq!(table.chart_map('Ж').as_deref(), Some("Zh"));
         assert_eq!(
             table.abugida_for('क').map(|a| a.name.as_str()),
             Some("devanagari")
-        );
-        assert_eq!(
-            table.abugida_for('ব').map(|a| a.name.as_str()),
-            Some("bengali")
         );
         assert!(
             table.abugida_for('।').is_none(),
@@ -932,19 +954,6 @@ kind = "chart"
         )
         .unwrap();
 
-        std::fs::write(
-            dir.join("romanize/bengali.toml"),
-            r#"
-[[scripts]]
-name = "bengali"
-kind = "abugida"
-dialect = "bengali"
-[scripts.consonants]
-"ক" = "q"
-"#,
-        )
-        .unwrap();
-
         let table = Table::load(&dir);
 
         assert_eq!(table.chart_map('х').as_deref(), Some("h"));
@@ -952,14 +961,6 @@ dialect = "bengali"
 
         assert_eq!(table.chart_map('ა').as_deref(), Some("a"));
         assert_eq!(table.chart_map('ბ').as_deref(), Some("b"));
-
-        let bengali = table.abugida_for('ক').unwrap();
-        assert_eq!(bengali.consonant('ক'), Some("q"));
-        assert_eq!(
-            bengali.consonant('খ'),
-            Some("kh"),
-            "other letters untouched"
-        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
