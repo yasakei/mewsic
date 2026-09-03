@@ -36,34 +36,86 @@ jobs:
       - name: Clippy (warnings denied)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Install ClamAV (Linux only)
-        if: runner.os == 'Linux'
+      - name: Install ClamAV
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clamav
-          sudo systemctl stop clamav-freshclam || true
-          sudo rm -f /var/log/clamav/freshclam.log
-          for i in 1 2 3; do
-            echo "Updating virus database (attempt $i/3)..."
-            if sudo freshclam --verbose; then
-              echo "Database updated successfully."
-              break
-            fi
-            echo "freshclam failed, retrying in 10s..."
-            sleep 10
-            if [ "$i" = "3" ]; then
-              echo "::warning::Failed to update ClamAV database after 3 attempts, using existing DB if available."
-            fi
-          done
-          clamscan --version
-          ls -lh /var/lib/clamav/ || true
+          echo "Installing ClamAV on $RUNNER_OS..."
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y clamav
+            sudo systemctl stop clamav-freshclam || true
+            sudo rm -f /var/log/clamav/freshclam.log
+            for i in 1 2 3; do
+              echo "Updating virus database (attempt $i/3)..."
+              if sudo freshclam --verbose; then
+                echo "Database updated successfully."
+                break
+              fi
+              echo "freshclam failed, retrying in 10s..."
+              sleep 10
+              if [ "$i" = "3" ]; then
+                echo "::warning::Failed to update ClamAV DB after 3 attempts."
+              fi
+            done
+            clamscan --version
+            ls -lh /var/lib/clamav/ || true
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew update
+            brew install clamav
+            for conf in /opt/homebrew/etc/clamav/freshclam.conf.sample /usr/local/etc/clamav/freshclam.conf.sample; do
+              if [ -f "$conf" ]; then
+                dest="${conf%.sample}"
+                mkdir -p "$(dirname "$dest")"
+                cp "$conf" "$dest" 2>/dev/null || sudo cp "$conf" "$dest" || true
+                sed -i.bak 's/^Example/#Example/' "$dest" 2>/dev/null || sed -i '' 's/^Example/#Example/' "$dest" || true
+              fi
+            done
+            for i in 1 2 3; do
+              echo "Updating virus database (attempt $i/3)..."
+              if freshclam --verbose; then
+                echo "Database updated."
+                break
+              fi
+              sleep 10
+            done
+            clamscan --version
+            ls -lh /opt/homebrew/var/lib/clamav/ 2>/dev/null || ls -lh /usr/local/var/lib/clamav/ 2>/dev/null || ls -lh /var/lib/clamav/ || true
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            choco install clamav -y --no-progress || echo "clamav choco install failed"
+            echo "C:/Program Files/ClamAV" >> "$GITHUB_PATH" || true
+            echo "C:/Program Files (x86)/ClamAV" >> "$GITHUB_PATH" || true
+            export PATH="$PATH:/c/Program Files/ClamAV:/c/Program Files (x86)/ClamAV"
+            for i in 1 2 3; do
+              echo "Updating virus database (attempt $i/3)..."
+              if freshclam --verbose 2>&1 | tee freshclam.log; then
+                break
+              fi
+              if "/c/Program Files/ClamAV/freshclam.exe" --verbose 2>&1 | tee -a freshclam.log; then
+                break
+              fi
+              sleep 10
+            done
+            cat freshclam.log || true
+            clamscan --version || "/c/Program Files/ClamAV/clamscan.exe" --version || true
+            ls -lh "/c/Program Files/ClamAV/db" 2>/dev/null || ls -lh "/c/ProgramData/ClamAV/db" 2>/dev/null || true
+          fi
 
       - name: Virus scan (ClamAV)
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
-          echo "Scanning build artifacts for viruses..."
+          echo "Scanning build artifacts on $RUNNER_OS..."
           set +e
-          clamscan -r \
+          CLAMSCAN="clamscan"
+          if [ "$RUNNER_OS" = "Windows" ] && ! command -v clamscan >/dev/null 2>&1; then
+            if [ -f "/c/Program Files/ClamAV/clamscan.exe" ]; then
+              CLAMSCAN="/c/Program Files/ClamAV/clamscan.exe"
+            elif [ -f "/c/Program Files (x86)/ClamAV/clamscan.exe" ]; then
+              CLAMSCAN="/c/Program Files (x86)/ClamAV/clamscan.exe"
+            fi
+          fi
+          echo "Using scanner: $CLAMSCAN"
+          "$CLAMSCAN" --version || true
+          "$CLAMSCAN" -r \
             --infected \
             --suppress-ok-results \
             --scan-archive=yes \
@@ -80,16 +132,44 @@ jobs:
           elif [ "$EXIT_CODE" = "1" ]; then
             echo "::error::Virus detected in build artifacts! See log above."
             exit 1
-          else
-            echo "::error::ClamAV scan failed with exit code $EXIT_CODE"
+          elif [ "$EXIT_CODE" = "2" ]; then
+            echo "::error::ClamAV scan error (exit 2). See log."
             cat clamav-scan.log
+            exit 1
+          else
+            echo "::error::ClamAV failed with exit $EXIT_CODE"
+            cat clamav-scan.log || true
             exit 1
           fi
 
+      - name: Windows Defender scan (Windows only)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Host "Running Windows Defender scan on target/ ..."
+          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          if (Test-Path $defender) {
+            & $defender -Scan -ScanType 3 -File target -DisableRemediation
+            $code = $LASTEXITCODE
+            Write-Host "Defender exit code: $code"
+            if ($code -eq 2) {
+              Write-Host "::error::Windows Defender detected threats!"
+              exit 1
+            } elseif ($code -ne 0 -and $code -ne 2) {
+              Write-Host "::warning::Defender scan returned $code (may be clean)"
+            } else {
+              Write-Host "✓ Defender: no threats."
+            }
+          } else {
+            Write-Host "::warning::MpCmdRun not found, skipping Defender scan"
+          }
+
       - name: Upload ClamAV scan report
-        if: always() && runner.os == 'Linux'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: clamav-scan-report-${{ matrix.os }}
-          path: clamav-scan.log
+          path: |
+            clamav-scan.log
+            freshclam.log
           if-no-files-found: warn
