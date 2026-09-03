@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -223,11 +225,79 @@ jobs:
             $code = $LASTEXITCODE
             Write-Host "Defender exit code: $code"
             if ($code -eq 2) { Write-Host "::error::Defender detected threats!"; exit 1 }
-            elseif ($code -eq 0) { Write-Host "✓ Defender clean" }
+            elseif ($code -eq 0) { Write-Host "Defender clean - no threats." }
             else { Write-Host "::warning::Defender code $code" }
           } else {
             Write-Host "::warning::MpCmdRun not found"
           }
+
+      - name: Sign Windows artifacts (Authenticode + Cosign + checksums)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -e
+          echo "=== Windows Code Signing ==="
+          ls -lh dist/ || true
+          echo "--- Generating SHA256 checksums ---"
+          (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt) || true
+          # 1. Authenticode via signtool if WINDOWS_CERT secrets are configured
+          if [ -n "${{ secrets.WINDOWS_CERT_BASE64 }}" ] && [ -n "${{ secrets.WINDOWS_CERT_PASSWORD }}" ]; then
+            echo "Authenticode certificate found, signing with signtool..."
+            echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 --decode > /tmp/cert.pfx
+            SIGNTOOL=$(find "/c/Program Files (x86)/Windows Kits" -name "signtool.exe" 2>/dev/null | head -1)
+            if [ -z "$SIGNTOOL" ]; then SIGNTOOL=$(find "/c/Program Files/Windows Kits" -name "signtool.exe" 2>/dev/null | head -1); fi
+            if [ -z "$SIGNTOOL" ]; then SIGNTOOL="signtool"; fi
+            echo "Using signtool: $SIGNTOOL"
+            for f in dist/*.exe; do
+              [ -f "$f" ] || continue
+              echo "Signing $f with signtool..."
+              "$SIGNTOOL" sign //fd SHA256 //f /tmp/cert.pfx //p "${{ secrets.WINDOWS_CERT_PASSWORD }}" //tr http://timestamp.digicert.com //td SHA256 "$f" 2>&1 || echo "::warning::signtool failed for $f"
+              "$SIGNTOOL" verify //pa "$f" 2>&1 | head -20 || echo "::warning::verify failed for $f"
+            done
+            rm -f /tmp/cert.pfx
+            # Re-generate checksums after signing (signing modifies binary)
+            (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt) || true
+          else
+            echo "::notice::No WINDOWS_CERT secrets - skipping Authenticode. For production:"
+            echo "  1. Azure Trusted Signing (free for OSS): https://azure.github.io/trusted-signing-action/"
+            echo "  2. Or set WINDOWS_CERT_BASE64 (pfx base64) + WINDOWS_CERT_PASSWORD secrets"
+          fi
+          # 2. Cosign keyless signing (free, GitHub OIDC) - works without secrets
+          echo "--- Cosign keyless signing ---"
+          COSIGN=""
+          if command -v cosign >/dev/null 2>&1; then
+            COSIGN=cosign
+          else
+            echo "Installing cosign..."
+            curl -sL -o /tmp/cosign.exe https://github.com/sigstore/cosign/releases/latest/download/cosign-windows-amd64.exe 2>&1 || echo "cosign download failed"
+            if [ -f /tmp/cosign.exe ]; then
+              chmod +x /tmp/cosign.exe
+              COSIGN=/tmp/cosign.exe
+            fi
+          fi
+          if [ -n "$COSIGN" ] && ( command -v "$COSIGN" >/dev/null 2>&1 || [ -f "$COSIGN" ] ); then
+            echo "Using cosign: $COSIGN"
+            "$COSIGN" version 2>&1 || true
+            for f in dist/*; do
+              [ -f "$f" ] || continue
+              case "$f" in *.sig|*.pem|*.txt) continue;; esac
+              echo "cosign sign-blob $f"
+              "$COSIGN" sign-blob --yes --output-signature "$f.sig" --output-certificate "$f.pem" "$f" 2>&1 | tee -a cosign.log || echo "::warning::cosign failed for $f (may need id-token: write)"
+              ls -lh "$f.sig" "$f.pem" 2>/dev/null || true
+            done
+            cat cosign.log 2>/dev/null | tail -50 || true
+          else
+            echo "::warning::cosign not available, skipping"
+          fi
+          echo "--- Final dist contents ---"
+          ls -R dist || true
+          cat dist/SHA256SUMS.txt 2>/dev/null || true
+
+      - name: Attest Windows build provenance (Sigstore)
+        if: runner.os == 'Windows'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
 
       - uses: actions/upload-artifact@v4
         with:
@@ -455,7 +525,7 @@ jobs:
             $code = $LASTEXITCODE
             Write-Host "Defender exit code: $code"
             if ($code -eq 2) { Write-Host "::error::Defender detected threats!"; exit 1 }
-            elseif ($code -eq 0) { Write-Host "✓ Defender clean" }
+            elseif ($code -eq 0) { Write-Host "Defender clean - no threats." }
             else { Write-Host "::warning::Defender code $code" }
           } else {
             Write-Host "::warning::MpCmdRun not found"
@@ -481,14 +551,72 @@ jobs:
         with:
           path: artifacts
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Sign Windows artifacts in release (Cosign keyless + checksums)
+        shell: bash
+        run: |
+          echo "=== Release signing: Windows artifacts ==="
+          find artifacts -type f -name "*.exe" -o -name "*.msi" | head -20
+          # Sign each Windows PE file with cosign (keyless, free via GitHub OIDC)
+          for f in artifacts/*/*; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.exe|*.msi)
+                echo "cosign sign-blob $f"
+                cosign sign-blob --yes --output-signature "$f.sig" --output-certificate "$f.pem" "$f" 2>&1 | tail -20 || echo "::warning::cosign failed for $f"
+                ls -lh "$f.sig" "$f.pem" 2>/dev/null || true
+                ;;
+              *) echo "Skipping non-Windows $f" ;;
+            esac
+          done
+          # Generate checksums before signing
+          ( cd artifacts && find . -type f ! -name checksums.txt ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          cat artifacts/checksums.txt
+          # Cosign the checksums file itself
+          cosign sign-blob --yes --output-signature artifacts/checksums.txt.sig --output-certificate artifacts/checksums.txt.pem artifacts/checksums.txt 2>&1 | tail -20 || echo "::warning::cosign checksums failed"
+          ls -lh artifacts/checksums.txt.* 2>/dev/null || true
+          # Optional Authenticode via osslsigncode if WINDOWS_CERT secrets present (cross-platform)
+          if [ -n "${{ secrets.WINDOWS_CERT_BASE64 }}" ]; then
+            echo "WINDOWS_CERT found, attempting osslsigncode for Windows binaries..."
+            sudo apt-get update && sudo apt-get install -y osslsigncode 2>&1 | tail -5 || true
+            echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 --decode > /tmp/cert.pfx
+            for f in artifacts/*/*.exe; do
+              [ -f "$f" ] || continue
+              echo "osslsigncode sign $f"
+              osslsigncode sign -pkcs12 /tmp/cert.pfx -pass "${{ secrets.WINDOWS_CERT_PASSWORD }}" -n "Mewsic" -i "https://github.com/${{ github.repository }}" -t http://timestamp.digicert.com -in "$f" -out "$f.signed" 2>&1 | tail -20 || echo "::warning::osslsigncode failed for $f"
+              if [ -f "$f.signed" ]; then mv "$f.signed" "$f"; echo "Signed $f"; fi
+            done
+            rm -f /tmp/cert.pfx
+            # Re-generate checksums after signing
+            ( cd artifacts && find . -type f ! -name checksums.txt ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+            cat artifacts/checksums.txt
+          else
+            echo "::notice::No WINDOWS_CERT secrets for osslsigncode - skipping Authenticode cross-signing. For production Authenticode, configure WINDOWS_CERT_BASE64 + WINDOWS_CERT_PASSWORD or Azure Trusted Signing."
+          fi
+          echo "--- Final artifacts for release ---"
+          find artifacts -type f | sort | xargs ls -lh 2>/dev/null || true
+
+      - name: Attest build provenance for release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/**/*
+
       - name: Create release and upload binaries
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          ( cd artifacts && find . -type f ! -name checksums.txt | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          # Use existing checksums.txt from signing step if present, else generate
+          if [ ! -f artifacts/checksums.txt ]; then
+            ( cd artifacts && find . -type f ! -name "checksums.txt*" ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          fi
+          cat artifacts/checksums.txt
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             || true
-          gh release upload "${GITHUB_REF_NAME}" artifacts/*/* artifacts/checksums.txt --clobber
+          gh release upload "${GITHUB_REF_NAME}" artifacts/*/* artifacts/checksums.txt* --clobber

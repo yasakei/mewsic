@@ -187,7 +187,7 @@ jobs:
             } elseif ($code -ne 0 -and $code -ne 2) {
               Write-Host "::warning::Defender scan returned $code (may be clean)"
             } else {
-              Write-Host "✓ Defender: no threats."
+              Write-Host "Defender: no threats - clean."
             }
           } else {
             Write-Host "::warning::MpCmdRun not found, skipping Defender scan"
