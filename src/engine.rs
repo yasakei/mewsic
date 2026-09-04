@@ -21,6 +21,8 @@ fn now_unix_secs() -> u64 {
 enum StatusMsg {
     Update { text: String, emoji: String },
     Clear,
+    Restore,
+    Shutdown(mpsc::Sender<()>),
 }
 
 pub struct Engine {
@@ -36,11 +38,31 @@ impl Engine {
 
         let sender_ctx = ctx.clone();
         let sender_thread = thread::spawn(move || {
+            let mut original_status = None;
             while let Ok(msg) = rx.recv() {
                 let token = sender_ctx.settings.read().unwrap().token.clone();
                 if token.is_empty() {
+                    if let StatusMsg::Shutdown(done) = msg {
+                        let _ = done.send(());
+                        break;
+                    }
                     continue;
                 }
+
+                if matches!(msg, StatusMsg::Update { .. } | StatusMsg::Clear)
+                    && original_status.is_none()
+                {
+                    match connector::fetch_status(&token) {
+                        Ok(status) => original_status = Some(status),
+                        Err(error) => {
+                            crate::log::write(&format!(
+                                "could not capture Discord status: {error:?}"
+                            ));
+                            continue;
+                        }
+                    }
+                }
+
                 let sent_at = Instant::now();
                 match msg {
                     StatusMsg::Update { text, emoji } => {
@@ -59,6 +81,26 @@ impl Engine {
                     StatusMsg::Clear => {
                         let _ = connector::patch_status(&token, "", "");
                     }
+                    StatusMsg::Restore => {
+                        if let Some(status) = original_status.as_ref() {
+                            if let Err(error) = connector::restore_status(&token, status) {
+                                crate::log::write(&format!(
+                                    "could not restore Discord status: {error:?}"
+                                ));
+                            }
+                        }
+                    }
+                    StatusMsg::Shutdown(done) => {
+                        if let Some(status) = original_status.as_ref() {
+                            if let Err(error) = connector::restore_status(&token, status) {
+                                crate::log::write(&format!(
+                                    "could not restore Discord status: {error:?}"
+                                ));
+                            }
+                        }
+                        let _ = done.send(());
+                        break;
+                    }
                 }
             }
         });
@@ -71,8 +113,8 @@ impl Engine {
         })
     }
 
-    pub fn quit(&self) -> &AtomicBool {
-        &self.quit
+    pub fn quit(&self) -> Arc<AtomicBool> {
+        self.quit.clone()
     }
 
     pub fn tick(&self, delta_ms: u64) {
@@ -85,6 +127,12 @@ impl Engine {
                 self.ctx.shared.tracker.lock().unwrap().sent_lines.clear();
             }
         }
+
+        // Revert to the pre-lyrics status when the song is paused.
+        if playing_edge_to_pause(&self.ctx) {
+            let _ = self.sender.send(StatusMsg::Restore);
+        }
+
         self.maybe_send_line();
     }
 
@@ -180,6 +228,10 @@ impl Engine {
 
     pub fn shutdown(&self) {
         self.quit.store(true, Ordering::SeqCst);
+        let (done_tx, done_rx) = mpsc::channel();
+        if self.sender.send(StatusMsg::Shutdown(done_tx)).is_ok() {
+            let _ = done_rx.recv_timeout(Duration::from_secs(5));
+        }
     }
 }
 
@@ -399,4 +451,66 @@ pub fn last_source(ctx: &AppContext) -> String {
 
 pub fn last_latency(ctx: &AppContext) -> u64 {
     ctx.shared.tracker.lock().unwrap().last_latency
+}
+
+/// Detects the playing -> paused transition, updating the tracked previous
+/// state. Returns true exactly once per pause so the status is reverted
+/// rather than spamming Discord.
+fn playing_edge_to_pause(ctx: &AppContext) -> bool {
+    let mut tracker = ctx.shared.tracker.lock().unwrap();
+    let playing = ctx.shared.playback.lock().unwrap().is_playing;
+    let edge = tracker.prev_playing && !playing;
+    tracker.prev_playing = playing;
+    edge
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Settings;
+    use crate::state::{AppContext, Shared};
+    use std::sync::{Arc, RwLock};
+
+    fn test_ctx() -> Arc<AppContext> {
+        Arc::new(AppContext::new(
+            Shared::new(),
+            Arc::new(RwLock::new(Settings::default())),
+            std::path::PathBuf::from("/nonexistent"),
+        ))
+    }
+
+    fn set_playing(ctx: &AppContext, playing: bool) {
+        ctx.shared.playback.lock().unwrap().is_playing = playing;
+    }
+
+    #[test]
+    fn pause_edge_fires_only_on_the_transition() {
+        let ctx = test_ctx();
+        // Starts paused: no edge.
+        set_playing(&ctx, false);
+        assert!(!playing_edge_to_pause(&ctx));
+
+        // Start playing: no edge.
+        set_playing(&ctx, true);
+        assert!(!playing_edge_to_pause(&ctx));
+
+        // Pause: fires exactly once.
+        set_playing(&ctx, false);
+        assert!(playing_edge_to_pause(&ctx));
+        // Second tick while still paused: no repeat.
+        assert!(!playing_edge_to_pause(&ctx));
+
+        // Resume, then pause again: fires again.
+        set_playing(&ctx, true);
+        assert!(!playing_edge_to_pause(&ctx));
+        set_playing(&ctx, false);
+        assert!(playing_edge_to_pause(&ctx));
+    }
+
+    #[test]
+    fn never_playing_never_fires() {
+        let ctx = test_ctx();
+        assert!(!playing_edge_to_pause(&ctx));
+        assert!(!playing_edge_to_pause(&ctx));
+    }
 }

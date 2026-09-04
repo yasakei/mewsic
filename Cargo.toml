@@ -25,6 +25,7 @@ ureq = { version = "2", features = ["json"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "vendored"] }
 crossterm = "0.28"
 ratatui = "0.29"
+signal-hook = "0.3"
 base64 = "0.22"
 sha2 = "0.10"
 opener = "0.7"

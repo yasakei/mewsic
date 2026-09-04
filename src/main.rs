@@ -103,7 +103,7 @@ fn run(with_web: bool) {
     let interactive = tui::stdout_is_tty();
 
     if interactive && !with_web {
-        offer_startup_update(&ctx);
+        check_update_in_background(&ctx);
     }
 
     if let Some((pid, file)) = running_instance() {
@@ -145,6 +145,7 @@ fn run(with_web: bool) {
     }
 
     let engine = engine::Engine::new(ctx.clone());
+    install_signal_handlers(&engine);
     engine.spawn_poller();
 
     if interactive {
@@ -154,7 +155,7 @@ fn run(with_web: bool) {
         let mut last_tick = Instant::now();
         let mut last_render = Instant::now();
         loop {
-            if tui::poll_shortcut(&ctx) {
+            if engine.quit().load(Ordering::SeqCst) || tui::poll_shortcut(&ctx) {
                 break;
             }
             let now = Instant::now();
@@ -292,6 +293,16 @@ fn background_child() {
     run_headless(&ctx, &engine, true);
     engine.shutdown();
     crate::log::write("background engine stopped");
+}
+
+/// Route termination signals (SIGTERM, SIGINT) into the quit flag so the run
+/// loops break and `engine.shutdown()` can restore the user's status before
+/// the process exits. Without this, `mewsic stop` / `kill background` (which
+/// send SIGTERM) would terminate the process without restoring the status.
+fn install_signal_handlers(engine: &Arc<engine::Engine>) {
+    let quit = engine.quit().clone();
+    let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, quit.clone());
+    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, quit);
 }
 
 fn kill(target: Option<&str>) {
@@ -491,22 +502,14 @@ fn update_command(sub: Option<&str>) {
     println!("{}", state.message);
 }
 
-fn offer_startup_update(ctx: &AppContext) {
-    let state = update::check_only(ctx);
-    let Some(version) = state.latest else {
-        return;
-    };
-
-    println!("A new version (v{version}) is available. Download and install it now? [Y/n]");
-    let mut answer = String::new();
-    if std::io::stdin().read_line(&mut answer).is_err() {
-        return;
-    }
-    if answer.trim().is_empty() || answer.trim().eq_ignore_ascii_case("y") {
-        println!("Downloading and installing v{version}...");
-        let result = update::run_update(ctx, true);
-        println!("{}", result.message);
-    }
+/// Check for a newer release without blocking startup. The dashboard reads
+/// `ctx.shared.update` to render an "Update available" banner, so the network
+/// call happens on a background thread and the TUI appears immediately.
+fn check_update_in_background(ctx: &Arc<AppContext>) {
+    let ctx = ctx.clone();
+    thread::spawn(move || {
+        update::check_only(&ctx);
+    });
 }
 
 fn apply_update_helper(staged: Option<&String>) {
