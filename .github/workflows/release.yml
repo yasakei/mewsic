@@ -79,15 +79,15 @@ jobs:
         run: |
           echo "Building WiX MSI (per-user, no Store)..."
           cargo install cargo-wix --locked || cargo install cargo-wix
-          # init wix files if not present (idempotent)
-          cargo wix init --force 2>&1 | head -20 || true
+          # init wix files if not present (idempotent); -p needed since this repo is a cargo workspace
+          cargo wix init --force -p mewsic 2>&1 | head -20 || true
           # patch to perUser if needed (cargo-wix 0.3+ respects install-scope perUser from Cargo.toml, but ensure)
           if [ -f wix/main.wxs ]; then
             sed -i 's/InstallScope="perMachine"/InstallScope="perUser"/g' wix/main.wxs || true
             sed -i 's/InstallPrivileges="elevated"/InstallPrivileges="limited"/g' wix/main.wxs || true
             grep -q "perUser" wix/main.wxs && echo "patched to perUser" || echo "wix perUser already or not found"
           fi
-          cargo wix --nocapture 2>&1 | tail -50
+          cargo wix -p mewsic --nocapture 2>&1 | tail -50
           ls -R target/wix/ 2>/dev/null | head -100 || true
           cp target/wix/*.msi dist/ 2>/dev/null || cp target/wix/**/*.msi dist/ 2>/dev/null || true
           ls -lh dist/*.msi 2>/dev/null || echo "no msi found, listing dist:"; ls -lh dist/ || true
