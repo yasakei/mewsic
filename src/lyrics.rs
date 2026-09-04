@@ -26,7 +26,7 @@ impl Source for LrcLibSource {
             urlencode(title),
             urlencode(artist)
         );
-        let resp = net::agent().get(&url).call().map_err(|e| e.to_string())?;
+        let resp = net::lyrics_agent().get(&url).call().map_err(|e| e.to_string())?;
         if resp.status() != 200 {
             return Err(format!("LrcLib responded {}", resp.status()));
         }
@@ -70,7 +70,7 @@ impl Source for NetEaseSource {
 
 impl NetEaseSource {
     fn post(&self, url: &str) -> Result<ureq::Response, Box<ureq::Error>> {
-        net::agent()
+        net::lyrics_agent()
             .post(url)
             .set("Referer", "https://music.163.com")
             .set("Cookie", "appver=2.0.2")
@@ -113,7 +113,7 @@ impl Source for QqMusicSource {
         let url = format!(
             "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?g_tk=5381&format=json&inCharset=utf-8&outCharset=utf-8&songmid={mid}"
         );
-        let resp = net::agent()
+        let resp = net::lyrics_agent()
             .get(&url)
             .set("Referer", "http://y.qq.com/portal/player.html")
             .call()
@@ -139,7 +139,7 @@ impl QqMusicSource {
             "https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?inCharset=utf-8&outCharset=utf-8&format=json&key={}",
             urlencode(&format!("{title}-{artist}"))
         );
-        let resp = net::agent()
+        let resp = net::lyrics_agent()
             .get(&url)
             .set("Referer", "http://y.qq.com/portal/player.html")
             .call()
@@ -194,7 +194,7 @@ impl Source for CustomSource {
         }
         let api_key = self.api_key();
         let url = self.request_url(title, artist);
-        let req = net::agent().get(&url);
+        let req = net::lyrics_agent().get(&url);
         let req = if !api_key.is_empty() {
             req.set("Authorization", &format!("Bearer {api_key}"))
         } else {

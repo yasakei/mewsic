@@ -17,7 +17,7 @@ pub fn fetch_player(
         urlencode(username),
         urlencode(api_key)
     );
-    let resp = net::agent()
+    let resp = net::lastfm_agent()
         .get(&url)
         .call()
         .map_err(|e| FetchError::Other(e.to_string()))?;
@@ -106,7 +106,7 @@ fn fetch_duration_ms(api_key: &str, artist: &str, track: &str) -> Option<u64> {
         urlencode(track),
         urlencode(api_key)
     );
-    let resp = net::agent().get(&url).call().ok()?;
+    let resp = net::lastfm_agent().get(&url).call().ok()?;
     let json: Value = resp.into_json().ok()?;
     let raw = json.pointer("/track/duration").and_then(as_u64_value)?;
     if raw == 0 {

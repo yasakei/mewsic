@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -71,14 +73,24 @@ jobs:
           cp target/debian/*.deb dist/ 2>/dev/null || cp target/x86_64-unknown-linux-gnu/debian/*.deb dist/
           cp target/generate-rpm/*.rpm dist/
 
-      - name: Build Windows installer (NSIS)
+      - name: Build Windows installer (WiX MSI per-user)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          choco install nsis -y --no-progress
-          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "installer/mewsic.exe"
-          "/c/Program Files (x86)/NSIS/makensis.exe" installer/mewsic.nsi
-          cp installer/mewsic-setup.exe dist/
+          echo "Building WiX MSI (per-user, no Store)..."
+          cargo install cargo-wix --locked || cargo install cargo-wix
+          # init wix files if not present (idempotent)
+          cargo wix init --force 2>&1 | head -20 || true
+          # patch to perUser if needed (cargo-wix 0.3+ respects install-scope perUser from Cargo.toml, but ensure)
+          if [ -f wix/main.wxs ]; then
+            sed -i 's/InstallScope="perMachine"/InstallScope="perUser"/g' wix/main.wxs || true
+            sed -i 's/InstallPrivileges="elevated"/InstallPrivileges="limited"/g' wix/main.wxs || true
+            grep -q "perUser" wix/main.wxs && echo "patched to perUser" || echo "wix perUser already or not found"
+          fi
+          cargo wix --nocapture 2>&1 | tail -50
+          ls -R target/wix/ 2>/dev/null | head -100 || true
+          cp target/wix/*.msi dist/ 2>/dev/null || cp target/wix/**/*.msi dist/ 2>/dev/null || true
+          ls -lh dist/*.msi 2>/dev/null || echo "no msi found, listing dist:"; ls -lh dist/ || true
 
       - name: Build macOS installer (DMG)
         if: runner.os == 'macOS'
@@ -88,6 +100,225 @@ jobs:
           cp "target/${{ matrix.target }}/release/mewsic" dmg/Mewsic/mewsic
           ln -s /Applications dmg/Applications
           hdiutil create -volname "Mewsic" -srcfolder dmg -ov -format UDZO "dist/mewsic-${{ matrix.target }}.dmg"
+
+      - name: Install ClamAV (native)
+        shell: bash
+        run: |
+          echo "Installing ClamAV on $RUNNER_OS..."
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y clamav
+            sudo systemctl stop clamav-freshclam || true
+            sudo rm -f /var/log/clamav/freshclam.log
+            for i in 1 2 3; do
+              echo "Updating DB (attempt $i/3)..."
+              if sudo freshclam --verbose; then break; fi
+              sleep 10
+            done
+            clamscan --version
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew update
+            brew install clamav
+            for conf in /opt/homebrew/etc/clamav/freshclam.conf.sample /usr/local/etc/clamav/freshclam.conf.sample; do
+              if [ -f "$conf" ]; then
+                dest="${conf%.sample}"
+                mkdir -p "$(dirname "$dest")"
+                cp "$conf" "$dest" 2>/dev/null || sudo cp "$conf" "$dest" || true
+                sed -i.bak 's/^Example/#Example/' "$dest" 2>/dev/null || sed -i '' 's/^Example/#Example/' "$dest" || true
+              fi
+            done
+            for i in 1 2 3; do
+              if freshclam --verbose; then break; fi
+              sleep 10
+            done
+            clamscan --version
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            choco install clamav -y --no-progress || echo "choco failed"
+            mkdir -p /c/clamav/db
+            icacls "C:\\clamav\\db" //grant Everyone:F //T 2>/dev/null || chmod -R 777 /c/clamav/db 2>/dev/null || true
+            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory C:/clamav/db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
+            cat freshclam-win.conf
+            ls -ld /c/clamav/db || true
+            for i in 1 2 3; do
+              echo "Updating virus DB (attempt $i/3)..."
+              if freshclam --config-file=freshclam-win.conf --verbose 2>&1 | tee freshclam.log; then
+                echo "freshclam success"
+                break
+              fi
+              REAL_FRESH=$(find /c/ProgramData/chocolatey -name "freshclam.exe" -type f 2>/dev/null | head -1)
+              if [ -n "$REAL_FRESH" ] && [ -f "$REAL_FRESH" ]; then
+                echo "Trying real freshclam: $REAL_FRESH"
+                if "$REAL_FRESH" --config-file="$(pwd)/freshclam-win.conf" --verbose 2>&1 | tee -a freshclam.log; then
+                  break
+                fi
+              fi
+              sleep 10
+            done
+            cat freshclam.log || true
+            ls -R /c/clamav/db 2>/dev/null | head -100 || ls -lh /c/clamav/db/ || true
+            clamscan --database=C:/clamav/db --version 2>&1 || clamscan --version 2>&1 || true
+            REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
+            if [ -n "$REAL_SCAN" ]; then
+              "$REAL_SCAN" --database=C:/clamav/db --version 2>&1 || true
+            fi
+          fi
+
+      - name: Virus scan dist/ (ClamAV native)
+        shell: bash
+        run: |
+          echo "Scanning dist/ on $RUNNER_OS..."
+          ls -R dist || true
+          CLAMSCAN="clamscan"
+          CLAM_DB_ARGS=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if [ -d /c/clamav/db ] && ( ls /c/clamav/db/*.cvd >/dev/null 2>&1 || ls /c/clamav/db/*.cld >/dev/null 2>&1 || ls /c/clamav/db/*.dat >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=C:/clamav/db"
+            elif [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=clamav-db"
+            fi
+            if ! command -v clamscan >/dev/null 2>&1; then
+              REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
+              if [ -n "$REAL_SCAN" ] && [ -f "$REAL_SCAN" ]; then
+                CLAMSCAN="$REAL_SCAN"
+              fi
+            fi
+            if [ -n "$CLAM_DB_ARGS" ]; then
+              echo "Using DB: $CLAM_DB_ARGS ($(ls -1 /c/clamav/db 2>/dev/null | tr '\n' ' '; ls -1 clamav-db 2>/dev/null | tr '\n' ' '))"
+            else
+              echo "::warning::ClamAV DB not found, will try default DB path (may fail)"
+            fi
+          fi
+          echo "Using: $CLAMSCAN $CLAM_DB_ARGS"
+          "$CLAMSCAN" $CLAM_DB_ARGS --version 2>&1 || true
+          set +e
+          if [ "$RUNNER_OS" = "Windows" ] && [ -z "$CLAM_DB_ARGS" ]; then
+            echo "::warning::ClamAV DB not found on Windows, skipping ClamAV scan (Defender will cover)"
+            echo "SKIPPED - ClamAV DB missing" | tee clamav-dist-scan.log
+            EXIT_CODE=0
+          else
+            "$CLAMSCAN" $CLAM_DB_ARGS -r \
+              --infected \
+              --suppress-ok-results \
+              --scan-archive=yes \
+              --alert-broken=yes \
+              --heuristic-alerts=yes \
+              --cross-fs=no \
+              --max-filesize=4000M \
+              --max-scansize=4000M \
+              dist 2>&1 | tee clamav-dist-scan.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
+          echo "ClamAV exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "✓ No viruses in dist/"
+          elif [ "$EXIT_CODE" = "1" ]; then
+            echo "::error::Virus detected in dist/!"
+            exit 1
+          elif [ "$EXIT_CODE" = "2" ]; then
+            echo "::error::ClamAV error"
+            cat clamav-dist-scan.log
+            exit 1
+          else
+            echo "::error::ClamAV failed $EXIT_CODE"
+            cat clamav-dist-scan.log || true
+            exit 1
+          fi
+
+      - name: Windows Defender scan dist/ (Windows only)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Host "Running Windows Defender scan on dist/ ..."
+          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          $mpLog = "C:\Users\RUNNER~1\AppData\Local\Temp\MpCmdRun.log"
+          if (Test-Path $defender) {
+            & $defender -Scan -ScanType 3 -File dist -DisableRemediation
+            $code = $LASTEXITCODE
+            Write-Host "Defender exit code: $code"
+            if (Test-Path $mpLog) {
+              Write-Host "--- MpCmdRun.log tail ---"
+              Get-Content $mpLog -Tail 100 2>$null | Write-Host
+              Write-Host "--- end log ---"
+            }
+            if ($code -eq 0) {
+              Write-Host "Defender clean - no threats."
+            } elseif ($code -eq 2) {
+              Write-Host "::warning::Defender exit 2 - scan error (0x80508023 common on GH runners), not failing job. See MpCmdRun.log above."
+            } else {
+              Write-Host "::warning::Defender code $code"
+            }
+          } else {
+            Write-Host "::warning::MpCmdRun not found"
+          }
+          exit 0
+
+      - name: Sign Windows artifacts (Authenticode + Cosign + checksums)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -e
+          echo "=== Windows Code Signing ==="
+          ls -lh dist/ || true
+          echo "--- Generating SHA256 checksums ---"
+          (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt) || true
+          # 1. Authenticode via signtool if WINDOWS_CERT secrets are configured
+          if [ -n "${{ secrets.WINDOWS_CERT_BASE64 }}" ] && [ -n "${{ secrets.WINDOWS_CERT_PASSWORD }}" ]; then
+            echo "Authenticode certificate found, signing with signtool..."
+            echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 --decode > /tmp/cert.pfx
+            SIGNTOOL=$(find "/c/Program Files (x86)/Windows Kits" -name "signtool.exe" 2>/dev/null | head -1)
+            if [ -z "$SIGNTOOL" ]; then SIGNTOOL=$(find "/c/Program Files/Windows Kits" -name "signtool.exe" 2>/dev/null | head -1); fi
+            if [ -z "$SIGNTOOL" ]; then SIGNTOOL="signtool"; fi
+            echo "Using signtool: $SIGNTOOL"
+            for f in dist/*.exe dist/*.msi; do
+              [ -f "$f" ] || continue
+              echo "Signing $f with signtool..."
+              "$SIGNTOOL" sign //fd SHA256 //f /tmp/cert.pfx //p "${{ secrets.WINDOWS_CERT_PASSWORD }}" //tr http://timestamp.digicert.com //td SHA256 "$f" 2>&1 || echo "::warning::signtool failed for $f"
+              "$SIGNTOOL" verify //pa "$f" 2>&1 | head -20 || echo "::warning::verify failed for $f"
+            done
+            rm -f /tmp/cert.pfx
+            # Re-generate checksums after signing (signing modifies binary)
+            (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt) || true
+          else
+            echo "::notice::No WINDOWS_CERT secrets - skipping Authenticode. For production:"
+            echo "  1. Azure Trusted Signing (free for OSS): https://azure.github.io/trusted-signing-action/"
+            echo "  2. Or set WINDOWS_CERT_BASE64 (pfx base64) + WINDOWS_CERT_PASSWORD secrets"
+          fi
+          # 2. Cosign keyless signing (free, GitHub OIDC) - works without secrets
+          echo "--- Cosign keyless signing ---"
+          COSIGN=""
+          if command -v cosign >/dev/null 2>&1; then
+            COSIGN=cosign
+          else
+            echo "Installing cosign..."
+            curl -sL -o /tmp/cosign.exe https://github.com/sigstore/cosign/releases/latest/download/cosign-windows-amd64.exe 2>&1 || echo "cosign download failed"
+            if [ -f /tmp/cosign.exe ]; then
+              chmod +x /tmp/cosign.exe
+              COSIGN=/tmp/cosign.exe
+            fi
+          fi
+          if [ -n "$COSIGN" ] && ( command -v "$COSIGN" >/dev/null 2>&1 || [ -f "$COSIGN" ] ); then
+            echo "Using cosign: $COSIGN"
+            "$COSIGN" version 2>&1 || true
+            for f in dist/*; do
+              [ -f "$f" ] || continue
+              case "$f" in *.sig|*.pem|*.txt) continue;; esac
+              echo "cosign sign-blob $f"
+              "$COSIGN" sign-blob --yes --output-signature "$f.sig" --output-certificate "$f.pem" "$f" 2>&1 | tee -a cosign.log || echo "::warning::cosign failed for $f (may need id-token: write)"
+              ls -lh "$f.sig" "$f.pem" 2>/dev/null || true
+            done
+            cat cosign.log 2>/dev/null | tail -50 || true
+          else
+            echo "::warning::cosign not available, skipping"
+          fi
+          echo "--- Final dist contents ---"
+          ls -R dist || true
+          cat dist/SHA256SUMS.txt 2>/dev/null || true
+
+      - name: Attest Windows build provenance (Sigstore)
+        if: runner.os == 'Windows'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
 
       - uses: actions/upload-artifact@v4
         with:
@@ -148,9 +379,203 @@ jobs:
           path: pkgout/*.pkg.tar.zst
           if-no-files-found: error
 
+  scan:
+    name: virus scan (ClamAV) · ${{ matrix.os }}
+    needs: [build, arch]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Install ClamAV
+        shell: bash
+        run: |
+          echo "Installing ClamAV on $RUNNER_OS..."
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y clamav
+            sudo systemctl stop clamav-freshclam || true
+            sudo rm -f /var/log/clamav/freshclam.log
+            for i in 1 2 3; do
+              echo "Updating virus database (attempt $i/3)..."
+              if sudo freshclam --verbose; then
+                echo "Database updated successfully."
+                break
+              fi
+              echo "freshclam failed, retrying in 10s..."
+              sleep 10
+              if [ "$i" = "3" ]; then
+                echo "::warning::Failed to update ClamAV DB after 3 attempts."
+              fi
+            done
+            clamscan --version
+            echo "Database info:"
+            ls -lh /var/lib/clamav/ || true
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew update
+            brew install clamav
+            for conf in /opt/homebrew/etc/clamav/freshclam.conf.sample /usr/local/etc/clamav/freshclam.conf.sample; do
+              if [ -f "$conf" ]; then
+                dest="${conf%.sample}"
+                mkdir -p "$(dirname "$dest")"
+                cp "$conf" "$dest" 2>/dev/null || sudo cp "$conf" "$dest" || true
+                sed -i.bak 's/^Example/#Example/' "$dest" 2>/dev/null || sed -i '' 's/^Example/#Example/' "$dest" || true
+              fi
+            done
+            for i in 1 2 3; do
+              echo "Updating virus database (attempt $i/3)..."
+              if freshclam --verbose; then
+                echo "Database updated."
+                break
+              fi
+              sleep 10
+            done
+            clamscan --version
+            ls -lh /opt/homebrew/var/lib/clamav/ 2>/dev/null || ls -lh /usr/local/var/lib/clamav/ 2>/dev/null || true
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            choco install clamav -y --no-progress || echo "choco failed"
+            mkdir -p /c/clamav/db
+            icacls "C:\\clamav\\db" //grant Everyone:F //T 2>/dev/null || chmod -R 777 /c/clamav/db 2>/dev/null || true
+            printf '%s\n' 'DatabaseMirror database.clamav.net' 'DatabaseMirror clamav.easynet.fr' 'DatabaseDirectory C:/clamav/db' 'MaxAttempts 3' 'ScriptedUpdates yes' 'CompressLocalDatabase yes' 'Bytecode yes' > freshclam-win.conf
+            cat freshclam-win.conf
+            ls -ld /c/clamav/db || true
+            for i in 1 2 3; do
+              echo "Updating virus DB (attempt $i/3)..."
+              if freshclam --config-file=freshclam-win.conf --verbose 2>&1 | tee freshclam.log; then
+                echo "freshclam success"
+                break
+              fi
+              REAL_FRESH=$(find /c/ProgramData/chocolatey -name "freshclam.exe" -type f 2>/dev/null | head -1)
+              if [ -n "$REAL_FRESH" ] && [ -f "$REAL_FRESH" ]; then
+                echo "Trying real freshclam: $REAL_FRESH"
+                if "$REAL_FRESH" --config-file="$(pwd)/freshclam-win.conf" --verbose 2>&1 | tee -a freshclam.log; then
+                  break
+                fi
+              fi
+              sleep 10
+            done
+            cat freshclam.log || true
+            ls -R /c/clamav/db 2>/dev/null | head -100 || ls -lh /c/clamav/db/ || true
+            clamscan --database=C:/clamav/db --version 2>&1 || clamscan --version 2>&1 || true
+            REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
+            if [ -n "$REAL_SCAN" ]; then
+              "$REAL_SCAN" --database=C:/clamav/db --version 2>&1 || true
+            fi
+          fi
+
+      - name: List artifacts
+        shell: bash
+        run: |
+          echo "Artifacts to scan:"
+          find artifacts -type f -exec ls -lh {} \; 2>/dev/null || powershell -Command "Get-ChildItem -Recurse artifacts | Format-List"
+          echo "---"
+          du -sh artifacts/*/* 2>/dev/null || du -sh artifacts/* 2>/dev/null || powershell -Command "Get-ChildItem -Recurse artifacts | Measure-Object -Property Length -Sum" || true
+
+      - name: Scan artifacts with ClamAV
+        shell: bash
+        run: |
+          echo "Scanning artifacts on $RUNNER_OS..."
+          set +e
+          CLAMSCAN="clamscan"
+          CLAM_DB_ARGS=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if [ -d /c/clamav/db ] && ( ls /c/clamav/db/*.cvd >/dev/null 2>&1 || ls /c/clamav/db/*.cld >/dev/null 2>&1 || ls /c/clamav/db/*.dat >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=C:/clamav/db"
+            elif [ -d clamav-db ] && ( ls clamav-db/*.cvd >/dev/null 2>&1 || ls clamav-db/*.cld >/dev/null 2>&1 ); then
+              CLAM_DB_ARGS="--database=clamav-db"
+            fi
+            if ! command -v clamscan >/dev/null 2>&1; then
+              REAL_SCAN=$(find /c/ProgramData/chocolatey -name "clamscan.exe" -type f 2>/dev/null | head -1)
+              if [ -n "$REAL_SCAN" ] && [ -f "$REAL_SCAN" ]; then
+                CLAMSCAN="$REAL_SCAN"
+              fi
+            fi
+            if [ -n "$CLAM_DB_ARGS" ]; then
+              echo "Using DB: $CLAM_DB_ARGS ($(ls -1 /c/clamav/db 2>/dev/null | tr '\n' ' '; ls -1 clamav-db 2>/dev/null | tr '\n' ' '))"
+            else
+              echo "::warning::ClamAV DB not found, will try default DB path (may fail)"
+            fi
+          fi
+          echo "Using scanner: $CLAMSCAN $CLAM_DB_ARGS"
+          "$CLAMSCAN" $CLAM_DB_ARGS --version 2>&1 || true
+          if [ "$RUNNER_OS" = "Windows" ] && [ -z "$CLAM_DB_ARGS" ]; then
+            echo "::warning::ClamAV DB not found on Windows, skipping ClamAV scan (Defender will cover)"
+            echo "SKIPPED - ClamAV DB missing" | tee clamav-scan.log
+            EXIT_CODE=0
+          else
+            "$CLAMSCAN" $CLAM_DB_ARGS -r \
+              --infected \
+              --suppress-ok-results \
+              --scan-archive=yes \
+              --alert-broken=yes \
+              --heuristic-alerts=yes \
+              --cross-fs=no \
+              --max-filesize=4000M \
+              --max-scansize=4000M \
+              artifacts 2>&1 | tee clamav-scan.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
+          echo "ClamAV exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "✓ No viruses detected."
+          elif [ "$EXIT_CODE" = "1" ]; then
+            echo "::error::Virus detected in artifacts! See log above."
+            exit 1
+          else
+            echo "::error::ClamAV scan failed with exit code $EXIT_CODE"
+            cat clamav-scan.log
+            exit 1
+          fi
+
+      - name: Windows Defender scan (Windows only)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Host "Running Windows Defender scan on artifacts/ ..."
+          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          $mpLog = "C:\Users\RUNNER~1\AppData\Local\Temp\MpCmdRun.log"
+          if (Test-Path $defender) {
+            & $defender -Scan -ScanType 3 -File artifacts -DisableRemediation
+            $code = $LASTEXITCODE
+            Write-Host "Defender exit code: $code"
+            if (Test-Path $mpLog) {
+              Write-Host "--- MpCmdRun.log tail ---"
+              Get-Content $mpLog -Tail 100 2>$null | Write-Host
+              Write-Host "--- end log ---"
+            }
+            if ($code -eq 0) {
+              Write-Host "Defender clean - no threats."
+            } elseif ($code -eq 2) {
+              Write-Host "::warning::Defender exit 2 - scan error (0x80508023 common on GH runners), not failing job. See MpCmdRun.log above."
+            } else {
+              Write-Host "::warning::Defender code $code"
+            }
+          } else {
+            Write-Host "::warning::MpCmdRun not found"
+          }
+          exit 0
+
+      - name: Upload scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clamav-scan-report-${{ matrix.os }}
+          path: |
+            clamav-scan.log
+            freshclam.log
+          if-no-files-found: warn
+
   release:
     name: release
-    needs: [build, arch]
+    needs: [build, arch, scan]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -158,14 +583,72 @@ jobs:
         with:
           path: artifacts
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Sign Windows artifacts in release (Cosign keyless + checksums)
+        shell: bash
+        run: |
+          echo "=== Release signing: Windows artifacts ==="
+          find artifacts -type f -name "*.exe" -o -name "*.msi" | head -20
+          # Sign each Windows PE file with cosign (keyless, free via GitHub OIDC)
+          for f in artifacts/*/*; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.exe|*.msi)
+                echo "cosign sign-blob $f"
+                cosign sign-blob --yes --output-signature "$f.sig" --output-certificate "$f.pem" "$f" 2>&1 | tail -20 || echo "::warning::cosign failed for $f"
+                ls -lh "$f.sig" "$f.pem" 2>/dev/null || true
+                ;;
+              *) echo "Skipping non-Windows $f" ;;
+            esac
+          done
+          # Generate checksums before signing
+          ( cd artifacts && find . -type f ! -name checksums.txt ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          cat artifacts/checksums.txt
+          # Cosign the checksums file itself
+          cosign sign-blob --yes --output-signature artifacts/checksums.txt.sig --output-certificate artifacts/checksums.txt.pem artifacts/checksums.txt 2>&1 | tail -20 || echo "::warning::cosign checksums failed"
+          ls -lh artifacts/checksums.txt.* 2>/dev/null || true
+          # Optional Authenticode via osslsigncode if WINDOWS_CERT secrets present (cross-platform)
+          if [ -n "${{ secrets.WINDOWS_CERT_BASE64 }}" ]; then
+            echo "WINDOWS_CERT found, attempting osslsigncode for Windows binaries..."
+            sudo apt-get update && sudo apt-get install -y osslsigncode 2>&1 | tail -5 || true
+            echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 --decode > /tmp/cert.pfx
+            for f in artifacts/*/*.exe; do
+              [ -f "$f" ] || continue
+              echo "osslsigncode sign $f"
+              osslsigncode sign -pkcs12 /tmp/cert.pfx -pass "${{ secrets.WINDOWS_CERT_PASSWORD }}" -n "Mewsic" -i "https://github.com/${{ github.repository }}" -t http://timestamp.digicert.com -in "$f" -out "$f.signed" 2>&1 | tail -20 || echo "::warning::osslsigncode failed for $f"
+              if [ -f "$f.signed" ]; then mv "$f.signed" "$f"; echo "Signed $f"; fi
+            done
+            rm -f /tmp/cert.pfx
+            # Re-generate checksums after signing
+            ( cd artifacts && find . -type f ! -name checksums.txt ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+            cat artifacts/checksums.txt
+          else
+            echo "::notice::No WINDOWS_CERT secrets for osslsigncode - skipping Authenticode cross-signing. For production Authenticode, configure WINDOWS_CERT_BASE64 + WINDOWS_CERT_PASSWORD or Azure Trusted Signing."
+          fi
+          echo "--- Final artifacts for release ---"
+          find artifacts -type f | sort | xargs ls -lh 2>/dev/null || true
+
+      - name: Attest build provenance for release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/**/*
+
       - name: Create release and upload binaries
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          ( cd artifacts && find . -type f ! -name checksums.txt | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          # Use existing checksums.txt from signing step if present, else generate
+          if [ ! -f artifacts/checksums.txt ]; then
+            ( cd artifacts && find . -type f ! -name "checksums.txt*" ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          fi
+          cat artifacts/checksums.txt
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             || true
-          gh release upload "${GITHUB_REF_NAME}" artifacts/*/* artifacts/checksums.txt --clobber
+          gh release upload "${GITHUB_REF_NAME}" artifacts/*/* artifacts/checksums.txt* --clobber

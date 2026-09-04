@@ -37,6 +37,9 @@ pub struct Tracker {
     pub latencies: Vec<u64>,
     pub last_latency: u64,
     pub lastfm_lag: Option<u64>,
+    /// Whether the player was playing on the previous tick, used to detect the
+    /// playing -> paused edge so the status reverts when the song is paused.
+    pub prev_playing: bool,
 }
 
 impl Tracker {
