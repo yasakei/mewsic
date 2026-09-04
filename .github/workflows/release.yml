@@ -605,8 +605,8 @@ jobs:
               *) echo "Skipping non-Windows $f" ;;
             esac
           done
-          # Generate checksums before signing
-          ( cd artifacts && find . -type f ! -name checksums.txt ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+          # Generate checksums before signing (exclude scan-report logs and signatures)
+          ( cd artifacts && find . -type f ! -name "checksums.txt*" ! -name "*.sig" ! -name "*.pem" ! -path "./clamav-scan-report-*/*" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
           cat artifacts/checksums.txt
           # Cosign the checksums file itself
           cosign sign-blob --yes --output-signature artifacts/checksums.txt.sig --output-certificate artifacts/checksums.txt.pem artifacts/checksums.txt 2>&1 | tail -20 || echo "::warning::cosign checksums failed"
@@ -624,7 +624,7 @@ jobs:
             done
             rm -f /tmp/cert.pfx
             # Re-generate checksums after signing
-            ( cd artifacts && find . -type f ! -name checksums.txt ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+            ( cd artifacts && find . -type f ! -name "checksums.txt*" ! -name "*.sig" ! -name "*.pem" ! -path "./clamav-scan-report-*/*" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
             cat artifacts/checksums.txt
           else
             echo "::notice::No WINDOWS_CERT secrets for osslsigncode - skipping Authenticode cross-signing. For production Authenticode, configure WINDOWS_CERT_BASE64 + WINDOWS_CERT_PASSWORD or Azure Trusted Signing."
@@ -644,11 +644,27 @@ jobs:
         run: |
           # Use existing checksums.txt from signing step if present, else generate
           if [ ! -f artifacts/checksums.txt ]; then
-            ( cd artifacts && find . -type f ! -name "checksums.txt*" ! -name "*.sig" ! -name "*.pem" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
+            ( cd artifacts && find . -type f ! -name "checksums.txt*" ! -name "*.sig" ! -name "*.pem" ! -path "./clamav-scan-report-*/*" | sort | xargs sha256sum | sed -E 's#  (./)?[^/]+/#  #' > checksums.txt )
           fi
           cat artifacts/checksums.txt
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             || true
-          gh release upload "${GITHUB_REF_NAME}" artifacts/*/* artifacts/checksums.txt* --clobber
+          # Upload only real release assets (mewsic-* artifacts + checksums);
+          # skip clamav-scan-report-* logs. Retry to survive transient 404s
+          # from the uploads endpoint right after release creation.
+          UPLOAD_OK=0
+          for i in 1 2 3 4 5; do
+            if gh release upload "${GITHUB_REF_NAME}" artifacts/mewsic-*/* artifacts/checksums.txt* --clobber; then
+              echo "Release upload succeeded (attempt $i)."
+              UPLOAD_OK=1
+              break
+            fi
+            echo "Release upload failed (attempt $i/5), retrying in 15s..."
+            sleep 15
+          done
+          if [ "$UPLOAD_OK" != "1" ]; then
+            echo "::error::gh release upload failed after 5 attempts"
+            exit 1
+          fi
