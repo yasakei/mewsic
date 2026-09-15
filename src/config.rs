@@ -60,6 +60,7 @@ pub struct Settings {
     pub timing: TimingSettings,
     pub update: UpdateSettings,
     pub lyrics: LyricsSettings,
+    pub usage: UsageSettings,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -176,6 +177,21 @@ impl Default for TimingSettings {
 #[serde(default)]
 pub struct UpdateSettings {
     pub auto_start: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UsageSettings {
+    /// Send anonymous usage statistics (OS, architecture, version) so the
+    /// project can publish "how many people use mewsic on which OS" graphs.
+    /// No IPs, usernames, tokens, or song data are ever included.
+    pub enabled: bool,
+}
+
+impl Default for UsageSettings {
+    fn default() -> Self {
+        UsageSettings { enabled: true }
+    }
 }
 
 impl Settings {

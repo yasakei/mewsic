@@ -81,6 +81,18 @@ Your Discord token never touches that file — it's stored in the OS credential
 manager (Keychain / Credential Manager / Secret Service), with a `0600`
 fallback file on systems without a keyring.
 
+### Telemetry
+
+By default mewsic sends one short, anonymous request per run so we can publish
+"how many people use mewsic on which OS" graphs. The payload is only:
+a random install id, your OS, your CPU architecture and the app version —
+**never IPs, usernames, tokens, or song data**. Aggregate stats live at
+[`mewsic.yasakei.dev/usage`](https://mewsic.yasakei.dev/usage).
+
+Opt out any time with `mewsic settings` → section 8, the web panel's *system*
+section, `usage.enabled = false` in `settings.toml`, or the environment
+variable `MEWSIC_NO_TELEMETRY=1`.
+
 ## Romanization
 
 Every letter-to-Latin table lives in [`romanize/`](romanize/) — **one TOML

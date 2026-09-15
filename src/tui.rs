@@ -966,12 +966,16 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
             cyan_bold("7"),
             Span::raw("  Lyrics (providers, custom)"),
         ]));
+        menu.push(Line::from(vec![
+            cyan_bold("8"),
+            Span::raw("  Privacy (telemetry)"),
+        ]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
         )));
 
-        let choice = prompt_text(&menu, "Choose 1-7 or Enter to save/exit", "", false)?;
+        let choice = prompt_text(&menu, "Choose 1-8 or Enter to save/exit", "", false)?;
         let c = choice.trim().to_lowercase();
 
         if c.is_empty() {
@@ -1164,10 +1168,28 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                 settings.lyrics.romanize =
                     prompt_confirm(&scr, "Romanize lyrics?", settings.lyrics.romanize)?;
             }
+            "8" | "privacy" | "telemetry" => {
+                let mut scr = Screen::new("Privacy");
+                scr.push(Line::from(dim(
+                    "Anonymous usage telemetry reports an install id, OS, architecture and",
+                )));
+                scr.push(Line::from(dim(
+                    "version once per run so usage graphs can be published. No IPs or",
+                )));
+                scr.push(Line::from(dim(
+                    "personal data. See mewsic.yasakei.dev/usage for the stats.",
+                )));
+                scr.blank();
+                settings.usage.enabled = prompt_confirm(
+                    &scr,
+                    "Send anonymous usage stats?",
+                    settings.usage.enabled,
+                )?;
+            }
             _ => {
                 let mut scr = Screen::new("Settings editor");
                 scr.push(Line::from(yellow(
-                    "Unknown choice — pick 1-7 or press Enter.",
+                    "Unknown choice — pick 1-8 or press Enter.",
                 )));
                 prompt_continue(&scr)?;
                 continue;

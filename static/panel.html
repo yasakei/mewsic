@@ -420,6 +420,16 @@
         </div>
         <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Installs a platform autostart entry (Linux/macOS/Windows).</small>
       </div>
+      <div class="flex flex-wrap items-center gap-3 py-3.5">
+        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="telemetry">Usage telemetry</label>
+        <div class="flex flex-1 items-center justify-end">
+          <label class="relative inline-flex cursor-pointer items-center">
+            <input type="checkbox" id="telemetry" class="peer sr-only">
+            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
+          </label>
+        </div>
+        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Reports an anonymous install id, OS, architecture and version once per run. No IPs or personal data — see mewsic.yasakei.dev/usage.</small>
+      </div>
       <small class="block py-3.5 text-[11px] text-zinc-400 dark:text-zinc-500">Updates are checked when you launch mewsic or run <code>mewsic update</code> in a terminal.</small>
     </div>
   </section>
@@ -454,6 +464,7 @@ function bindSettings() {
   setCheck("autoOffset", settings.timing.enable_autooffset);
   setVal("samples", settings.timing.autooffset);
   setCheck("autoStart", settings.update.auto_start);
+  setCheck("telemetry", settings.usage ? settings.usage.enabled !== false : true);
   $("token").value = "";
   $("token").placeholder = settings.hasToken
     ? "saved in your OS keychain — paste a new token to replace"
@@ -505,6 +516,7 @@ function collectSettings() {
       autooffset: Math.max(1, +$("samples").value || 3)
     },
     update: { auto_start: $("autoStart").checked },
+    usage: { enabled: $("telemetry").checked },
     lyrics: {
       providers: collectLyricsProviders(),
       romanize: $("romanize").checked,
@@ -643,7 +655,7 @@ async function checkToken() {
   }
 }
 
-["timestamp","label","autoClear","advanced","autoOffset","autoStart"].forEach(id => {
+["timestamp","label","autoClear","advanced","autoOffset","autoStart","telemetry"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); });
 });

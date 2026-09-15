@@ -14,6 +14,7 @@ mod state;
 mod sync;
 mod tui;
 mod update;
+mod usage;
 mod util;
 mod web;
 
@@ -101,6 +102,8 @@ fn init_context() -> Arc<AppContext> {
 fn run(with_web: bool) {
     let ctx = init_context();
     let interactive = tui::stdout_is_tty();
+
+    usage::report_in_background(&ctx);
 
     if interactive && !with_web {
         check_update_in_background(&ctx);
@@ -276,6 +279,7 @@ fn background() {
 
 fn background_child() {
     let ctx = init_context();
+    usage::report_in_background(&ctx);
     if let Some((pid, _file)) = running_instance() {
         crate::log::write(&format!(
             "background start refused: instance already running (pid {pid})"
