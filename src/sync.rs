@@ -19,7 +19,10 @@ pub fn build_status(
     };
     if settings.view.advanced.enabled {
         (
-            render_template(&settings.view.advanced.template, playback, &line),
+            crop(
+                &render_template(&settings.view.advanced.template, playback, &line),
+                MAX_STATUS_LENGTH,
+            ),
             settings.view.advanced.emoji.clone(),
         )
     } else {
@@ -118,5 +121,18 @@ mod tests {
         };
         let (text, _) = build_status(&settings, &Playback::default(), &line);
         assert_eq!(text, "annyeong");
+    }
+
+    #[test]
+    fn build_status_advanced_template_is_cropped_to_limit() {
+        let mut settings = Settings::default();
+        settings.view.advanced.enabled = true;
+        settings.view.advanced.template = "{lyrics}".to_string();
+        let line = LyricsLine {
+            time: 0,
+            text: "x".repeat(200),
+        };
+        let (text, _) = build_status(&settings, &Playback::default(), &line);
+        assert_eq!(text.chars().count(), MAX_STATUS_LENGTH);
     }
 }
