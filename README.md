@@ -89,6 +89,11 @@ a random install id, your OS, your CPU architecture and the app version —
 **never IPs, usernames, tokens, or song data**. Aggregate stats live at
 [`mewsic.yasakei.dev/usage`](https://mewsic.yasakei.dev/usage).
 
+Counts are keyed by the install id, not by how often you launch mewsic — run
+it a hundred times a day and you still count as one user. Your id is a random
+string generated once per installation (persisted in `~/.config/mewsic/install_id`)
+and the server keeps it for 90 days.
+
 Opt out any time with `mewsic settings` → section 8, the web panel's *system*
 section, `usage.enabled = false` in `settings.toml`, or the environment
 variable `MEWSIC_NO_TELEMETRY=1`.
