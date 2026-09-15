@@ -10,6 +10,10 @@ use crate::state::AppContext;
 use crate::sync::build_status;
 
 const DEFAULT_LASTFM_LAG_MS: u64 = 3_000;
+/// Refresh the status shortly before its `expires_at` lapses so a long
+/// instrumental gap between lyric lines doesn't blank the status out.
+const STATUS_KEEPALIVE_INTERVAL_MS: u64 =
+    crate::connector::STATUS_EXPIRY_SECS.saturating_sub(15) as u64 * 1000;
 
 fn now_unix_secs() -> u64 {
     SystemTime::now()
@@ -20,6 +24,7 @@ fn now_unix_secs() -> u64 {
 
 enum StatusMsg {
     Update { text: String, emoji: String },
+    KeepAlive { text: String, emoji: String },
     Clear,
     Restore,
     Shutdown(mpsc::Sender<()>),
@@ -49,8 +54,10 @@ impl Engine {
                     continue;
                 }
 
-                if matches!(msg, StatusMsg::Update { .. } | StatusMsg::Clear)
-                    && original_status.is_none()
+                if matches!(
+                    msg,
+                    StatusMsg::Update { .. } | StatusMsg::KeepAlive { .. } | StatusMsg::Clear
+                ) && original_status.is_none()
                 {
                     match connector::fetch_status(&token) {
                         Ok(status) => original_status = Some(status),
@@ -77,6 +84,9 @@ impl Engine {
                                 .unwrap()
                                 .add_latency(ms, limit);
                         }
+                    }
+                    StatusMsg::KeepAlive { text, emoji } => {
+                        let _ = connector::patch_status(&token, &text, &emoji);
                     }
                     StatusMsg::Clear => {
                         let _ = connector::patch_status(&token, "", "");
@@ -134,6 +144,32 @@ impl Engine {
         }
 
         self.maybe_send_line();
+        self.maybe_keep_alive();
+    }
+
+    /// Re-sends the current line when the status's `expires_at` is close to
+    /// lapsing but no new lyric has arrived, so the status doesn't blank out
+    /// during instrumental gaps longer than the expiry window.
+    fn maybe_keep_alive(&self) {
+        let last_send = self.ctx.shared.tracker.lock().unwrap().last_send;
+        let Some(last) = last_send else { return };
+        if (last.elapsed().as_millis() as u64) < STATUS_KEEPALIVE_INTERVAL_MS {
+            return;
+        }
+
+        let (text, emoji) = {
+            let playback = self.ctx.shared.playback.lock().unwrap();
+            if !playback.is_playing || !playback.has_lyrics || playback.ended() {
+                return;
+            }
+            let Some(line) = playback.current_line.as_ref() else {
+                return;
+            };
+            let settings = self.ctx.settings.read().unwrap();
+            build_status(&settings, &playback, line)
+        };
+        self.ctx.shared.tracker.lock().unwrap().last_send = Some(Instant::now());
+        let _ = self.sender.send(StatusMsg::KeepAlive { text, emoji });
     }
 
     fn maybe_send_line(&self) {
@@ -202,6 +238,7 @@ impl Engine {
             let line = playback.lyrics.as_ref().unwrap()[i].clone();
             playback.current_line = Some(line.clone());
             tracker.sent_lines.push(line.time);
+            tracker.last_send = Some(Instant::now());
 
             let (text, emoji) = build_status(&settings, &playback, &line);
             let _ = self.sender.send(StatusMsg::Update { text, emoji });
@@ -468,7 +505,7 @@ fn playing_edge_to_pause(ctx: &AppContext) -> bool {
 mod tests {
     use super::*;
     use crate::config::Settings;
-    use crate::state::{AppContext, Shared};
+    use crate::state::{AppContext, LyricsLine, Shared};
     use std::sync::{Arc, RwLock};
 
     fn test_ctx() -> Arc<AppContext> {
@@ -512,5 +549,79 @@ mod tests {
         let ctx = test_ctx();
         assert!(!playing_edge_to_pause(&ctx));
         assert!(!playing_edge_to_pause(&ctx));
+    }
+
+    #[test]
+    fn sending_a_line_records_last_send() {
+        let ctx = test_ctx();
+        let engine = Engine::new(ctx.clone());
+        {
+            let mut pb = ctx.shared.playback.lock().unwrap();
+            pb.song_id = "id".to_string();
+            pb.song_name = "Song".to_string();
+            pb.song_author = "Artist".to_string();
+            pb.has_lyrics = true;
+            pb.is_playing = true;
+            pb.song_progress = 2_000;
+            pb.song_duration = 300_000;
+            pb.lyrics = Some(vec![LyricsLine {
+                time: 1_500,
+                text: "hello".to_string(),
+            }]);
+        }
+
+        assert!(ctx.shared.tracker.lock().unwrap().last_send.is_none());
+        engine.maybe_send_line();
+        let last_send = ctx.shared.tracker.lock().unwrap().last_send;
+        assert!(
+            last_send.is_some(),
+            "a real line send must record when the status was last pushed"
+        );
+        assert!(last_send.unwrap().elapsed().as_millis() < 1_000);
+    }
+
+    #[test]
+    fn keep_alive_refreshes_last_send_on_an_expiring_status() {
+        let ctx = test_ctx();
+        let engine = Engine::new(ctx.clone());
+        {
+            let mut pb = ctx.shared.playback.lock().unwrap();
+            pb.song_id = "id".to_string();
+            pb.song_name = "Song".to_string();
+            pb.song_author = "Artist".to_string();
+            pb.has_lyrics = true;
+            pb.is_playing = true;
+            pb.song_duration = 300_000;
+            pb.current_line = Some(LyricsLine {
+                time: 9_000,
+                text: "still playing".to_string(),
+            });
+        }
+        // Simulate the last push being long enough ago that the status is
+        // about to expire.
+        ctx.shared.tracker.lock().unwrap().last_send =
+            Some(Instant::now() - Duration::from_millis(STATUS_KEEPALIVE_INTERVAL_MS + 10_000));
+
+        engine.maybe_keep_alive();
+        let last_send = ctx.shared.tracker.lock().unwrap().last_send;
+        assert!(
+            last_send.unwrap().elapsed().as_millis() < 1_000,
+            "an expiring status should be refreshed"
+        );
+    }
+
+    #[test]
+    fn keep_alive_skips_within_the_refresh_window() {
+        let ctx = test_ctx();
+        let engine = Engine::new(ctx.clone());
+        let before = Instant::now() - Duration::from_millis(5_000);
+        ctx.shared.tracker.lock().unwrap().last_send = Some(before);
+
+        engine.maybe_keep_alive();
+        assert_eq!(
+            ctx.shared.tracker.lock().unwrap().last_send,
+            Some(before),
+            "a recent push should not be refreshed yet"
+        );
     }
 }
