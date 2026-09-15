@@ -60,6 +60,7 @@ pub struct Settings {
     pub timing: TimingSettings,
     pub update: UpdateSettings,
     pub lyrics: LyricsSettings,
+    pub usage: UsageSettings,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -176,17 +177,33 @@ impl Default for TimingSettings {
 #[serde(default)]
 pub struct UpdateSettings {
     pub auto_start: bool,
-    pub auto_check: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UsageSettings {
+    /// Send anonymous usage statistics (OS, architecture, version) so the
+    /// project can publish "how many people use mewsic on which OS" graphs.
+    /// No IPs, usernames, tokens, or song data are ever included.
+    pub enabled: bool,
+}
+
+impl Default for UsageSettings {
+    fn default() -> Self {
+        UsageSettings { enabled: true }
+    }
 }
 
 impl Settings {
     pub fn load(dir: &Path) -> Settings {
         let path = dir.join("settings.toml");
         let mut settings = if let Ok(raw) = fs::read_to_string(&path) {
-            if let Ok(settings) = toml::from_str::<Settings>(&raw) {
-                settings
-            } else {
-                default_with_migration(dir)
+            match toml::from_str::<Settings>(&raw) {
+                Ok(settings) => settings,
+                Err(e) => {
+                    back_up_broken_settings(&path, &e);
+                    default_with_migration(dir)
+                }
             }
         } else {
             default_with_migration(dir)
@@ -235,6 +252,23 @@ fn default_with_migration(dir: &Path) -> Settings {
         settings = migrated;
     }
     settings
+}
+
+/// A parse failure means the user (or a bad edit) left `settings.toml`
+/// unreadable. Copy it aside before loading defaults, otherwise the next
+/// `save()` silently overwrites the broken file and the original config is
+/// lost forever.
+fn back_up_broken_settings(path: &Path, error: &toml::de::Error) {
+    let backup = path.with_extension("toml.bak");
+    match std::fs::copy(path, &backup) {
+        Ok(_) => crate::log::write(&format!(
+            "settings.toml could not be parsed ({error}); keeping a copy at {}",
+            backup.display()
+        )),
+        Err(e) => crate::log::write(&format!(
+            "settings.toml could not be parsed ({error}); could not back it up: {e}"
+        )),
+    }
 }
 
 #[cfg(unix)]
@@ -412,6 +446,35 @@ mod tests {
         let s = Settings::load(&dir);
         assert_eq!(s.source, Source::Spotify);
         assert_eq!(s.token, "t");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unparseable_settings_are_backed_up_not_overwritten() {
+        let _guard = KEYRING_ENV_LOCK.lock().unwrap();
+        std::env::set_var("MEWSIC_KEYRING_SERVICE", "mewsic-parse-test");
+        std::env::set_var("MEWSIC_KEYRING_USER", "parse-test");
+        let dir = std::env::temp_dir().join(format!("mewsic-parse-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+
+        let broken = "[view\ntimestamp = true\n[this is not toml";
+        fs::write(dir.join("settings.toml"), broken).unwrap();
+
+        let s = Settings::load(&dir);
+        assert_eq!(s.source, Source::Spotify);
+
+        // The broken file must survive for recovery, untouched.
+        let backup = fs::read_to_string(dir.join("settings.toml.bak")).unwrap();
+        assert_eq!(backup, broken);
+
+        // A subsequent valid file loads normally and leaves backups alone.
+        fs::write(
+            dir.join("settings.toml"),
+            "[view]\ntimestamp = false\n",
+        )
+        .unwrap();
+        assert!(!Settings::load(&dir).view.timestamp);
+
         let _ = fs::remove_dir_all(&dir);
     }
 

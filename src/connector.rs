@@ -5,6 +5,10 @@ use crate::net;
 const DISCORD_API: &str = "https://discord.com/api/v10";
 const SPOTIFY_API: &str = "https://api.spotify.com/v1";
 
+/// Discord drops a custom status once `expires_at` passes; the engine refreshes
+/// it before this lapses during long gaps between lyric lines.
+pub const STATUS_EXPIRY_SECS: i64 = 60;
+
 #[derive(Debug)]
 pub enum FetchError {
     Unauthorized,
@@ -158,7 +162,7 @@ pub fn patch_status(discord_token: &str, text: &str, emoji: &str) -> Result<(), 
     let expires = if text.is_empty() {
         serde_json::Value::Null
     } else {
-        json!(crate::util::iso_now_plus(60))
+        json!(crate::util::iso_now_plus(STATUS_EXPIRY_SECS))
     };
     let (emoji_name, emoji_id) = parse_emoji(emoji);
     let emoji_name = if emoji_name.is_empty() {
