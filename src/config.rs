@@ -176,7 +176,6 @@ impl Default for TimingSettings {
 #[serde(default)]
 pub struct UpdateSettings {
     pub auto_start: bool,
-    pub auto_check: bool,
 }
 
 impl Settings {
