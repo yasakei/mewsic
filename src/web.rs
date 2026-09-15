@@ -107,6 +107,11 @@ fn handle(mut stream: TcpStream, ctx: Arc<AppContext>) {
     let method = parts.next().unwrap_or("GET").to_string();
     let path = parts.next().unwrap_or("/").to_string();
 
+    if let Some(response) = verify_local_request(&headers) {
+        write_response(stream, response);
+        return;
+    }
+
     let mut body_len = 0usize;
     for h in &headers {
         if let Some(v) = h.to_lowercase().strip_prefix("content-length:") {
@@ -122,7 +127,10 @@ fn handle(mut stream: TcpStream, ctx: Arc<AppContext>) {
     }
 
     let response = route(&method, &path, &body, &ctx);
+    write_response(stream, response);
+}
 
+fn write_response(mut stream: TcpStream, response: Response) {
     let head = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n",
         response.status,
@@ -133,6 +141,59 @@ fn handle(mut stream: TcpStream, ctx: Arc<AppContext>) {
     let _ = stream.write_all(head.as_bytes());
     let _ = stream.write_all(&response.body);
     let _ = stream.flush();
+}
+
+fn locate_header<'a>(headers: &'a [String], name: &str) -> Option<&'a str> {
+    for h in headers {
+        if let Some(end) = h.find(':') {
+            if h[..end].trim_end().eq_ignore_ascii_case(name) {
+                return Some(h[end + 1..].trim());
+            }
+        }
+    }
+    None
+}
+
+fn verify_local_request(headers: &[String]) -> Option<Response> {
+    let forbidden = |reason: &'static str| Response {
+        status: 403,
+        reason: "Forbidden",
+        content_type: "text/plain; charset=utf-8",
+        body: reason.as_bytes().to_vec(),
+    };
+
+    // Host must be localhost. DNS rebinding rides a real browser, which
+    // resolves an attacker's domain to 127.0.0.1 but still sends the
+    // attacker's Host header — rejecting anything non-local stops it.
+    if let Some(host) = locate_header(headers, "host") {
+        if !host_is_local(host) {
+            return Some(forbidden("forbidden host"));
+        }
+    }
+
+    // Browsers always send Origin on cross-site POSTs (even `no-cors`
+    // fetches). A same-origin request from the panel is the only valid one.
+    if let Some(origin) = locate_header(headers, "origin") {
+        let local_origins = [
+            "http://localhost:8999",
+            "http://127.0.0.1:8999",
+        ];
+        if !local_origins.contains(&origin) {
+            return Some(forbidden("forbidden origin"));
+        }
+    }
+
+    None
+}
+
+fn host_is_local(host: &str) -> bool {
+    let host = host.trim();
+    let (name, port) = match host.rsplit_once(':') {
+        Some((n, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (n, Some(p)),
+        _ => (host, None),
+    };
+    let _ = port;
+    matches!(name, "127.0.0.1" | "localhost" | "[::1]")
 }
 
 struct Response {
@@ -251,5 +312,59 @@ mod tests {
     fn panel_script_does_not_bind_removed_auto_check_control() {
         assert!(!PANEL_HTML.contains("autoCheck"));
         assert!(PANEL_HTML.contains("pollState();"));
+    }
+
+    #[test]
+    fn local_host_is_accepted() {
+        assert!(host_is_local("127.0.0.1:8999"));
+        assert!(host_is_local("localhost:8999"));
+        assert!(host_is_local("127.0.0.1"));
+        assert!(host_is_local("localhost"));
+        assert!(host_is_local("[::1]:8999"));
+        assert!(!host_is_local("evil.example.com"));
+        assert!(!host_is_local("evil.example.com:8999"));
+    }
+
+    #[test]
+    fn rebinding_and_cors_requests_are_forbidden() {
+        // DNS rebinding: real browser, attacker-controlled Host.
+        let rebinding = vec!["Host: evil.example.com:8999".to_string()];
+        let resp = verify_local_request(&rebinding).unwrap();
+        assert_eq!(resp.status, 403);
+
+        // Cross-origin POST from any website (Origin is always sent).
+        let cross_site = vec![
+            "Host: 127.0.0.1:8999".to_string(),
+            "Origin: https://evil.example.com".to_string(),
+        ];
+        let resp = verify_local_request(&cross_site).unwrap();
+        assert_eq!(resp.status, 403);
+
+        // Null origin (sandboxed iframe / data: URL) is not trusted.
+        let null_origin = vec![
+            "Host: 127.0.0.1:8999".to_string(),
+            "Origin: null".to_string(),
+        ];
+        assert_eq!(verify_local_request(&null_origin).unwrap().status, 403);
+    }
+
+    #[test]
+    fn same_origin_and_non_browser_requests_pass() {
+        let same_origin = vec![
+            "Host: localhost:8999".to_string(),
+            "Origin: http://localhost:8999".to_string(),
+        ];
+        assert!(verify_local_request(&same_origin).is_none());
+
+        // CLI tools like curl omit Origin.
+        let curl = vec!["Host: 127.0.0.1:8999".to_string()];
+        assert!(verify_local_request(&curl).is_none());
+
+        // Origin using the other loopback spelling is still local.
+        let other_spelling = vec![
+            "Host: 127.0.0.1:8999".to_string(),
+            "Origin: http://127.0.0.1:8999".to_string(),
+        ];
+        assert!(verify_local_request(&other_spelling).is_none());
     }
 }
