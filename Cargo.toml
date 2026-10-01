@@ -30,6 +30,9 @@ base64 = "0.22"
 sha2 = "0.10"
 opener = "0.7"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+mpris = "2"
+
 [profile.release]
 opt-level = 3
 lto = "thin"
@@ -57,4 +60,3 @@ path-guid = "50097253-D378-46ED-A68D-D764F442CD25"
 license = false
 eula = false
 install-scope = "perUser"
-# per-user avoids admin + HKLM PATH (less Wacapew) — installs to %LOCALAPPDATA%
