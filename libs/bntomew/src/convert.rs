@@ -39,7 +39,13 @@ pub fn transliterate(input: &str) -> TranslitResult {
         }
 
         let mut matched = false;
-        if !chars[..i].iter().rev().copied().next().is_some_and(is_bengali) {
+        if !chars[..i]
+            .iter()
+            .rev()
+            .copied()
+            .next()
+            .is_some_and(is_bengali)
+        {
             for (word, rom) in &words {
                 let wchars: Vec<char> = word.chars().collect();
                 if wchars.is_empty() || !chars[i..].starts_with(&wchars) {
@@ -105,10 +111,7 @@ pub fn transliterate(input: &str) -> TranslitResult {
     romanized = out;
     let romanized = romanized.trim().to_string();
 
-    TranslitResult {
-        bengali,
-        romanized,
-    }
+    TranslitResult { bengali, romanized }
 }
 
 fn absorb_suffix(chars: &[char], idx: usize) -> Option<(&'static str, &'static str)> {
@@ -368,10 +371,7 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
                 delete = false;
             } else {
                 let h = syls[this].head;
-                let keep_final = matches!(
-                    h,
-                    'ল' | 'ট' | 'ত' | '\u{09DC}' | '\u{09DD}'
-                ) && n == 2;
+                let keep_final = matches!(h, 'ল' | 'ট' | 'ত' | '\u{09DC}' | '\u{09DD}') && n == 2;
                 delete = !keep_final;
             }
         } else if !protect_from_left {
@@ -381,8 +381,10 @@ fn apply_schwa_deletion(syls: &mut [Syllable]) {
                 let schwa_head = syls[this].head;
                 let next_head = syls[(i + 1) as usize].head;
                 let is_rhotic = matches!(schwa_head, 'র' | '\u{09DC}' | '\u{09DD}');
-                let next_is_retroflex =
-                    matches!(next_head, 'ট' | 'ঠ' | 'ড' | 'ঢ' | 'ণ' | '\u{09DC}' | '\u{09DD}');
+                let next_is_retroflex = matches!(
+                    next_head,
+                    'ট' | 'ঠ' | 'ড' | 'ঢ' | 'ণ' | '\u{09DC}' | '\u{09DD}'
+                );
                 if !is_rhotic && !next_is_retroflex {
                     delete = true;
                 }
