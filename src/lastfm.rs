@@ -96,6 +96,7 @@ fn parse_nowplaying(json: &Value) -> Result<Option<PlayerState>, FetchError> {
         track_id: format!("{mbid}|{artist}|{name}"),
         name,
         artist,
+        youtube_id: None,
     }))
 }
 
@@ -117,6 +118,67 @@ fn fetch_duration_ms(api_key: &str, artist: &str, track: &str) -> Option<u64> {
     } else {
         raw.saturating_mul(1000)
     })
+}
+
+pub fn fetch_lyrics(
+    api_key: &str,
+    artist: &str,
+    track: &str,
+) -> Result<Option<Vec<crate::state::LyricsLine>>, String> {
+    if api_key.trim().is_empty() {
+        return Err("last.fm api key missing".into());
+    }
+    let url = format!(
+        "{LASTFM_API}?method=track.getLyrics&artist={}&track={}&autocorrect=1&format=json&api_key={}",
+        urlencode(artist),
+        urlencode(track),
+        urlencode(api_key)
+    );
+    let resp = net::lastfm_agent()
+        .get(&url)
+        .call()
+        .map_err(|e| e.to_string())?;
+    let json: Value = resp.into_json().map_err(|e| e.to_string())?;
+    parse_lyrics_body(&json)
+}
+
+fn parse_lyrics_body(json: &Value) -> Result<Option<Vec<crate::state::LyricsLine>>, String> {
+    if let Some(err) = json.get("error") {
+        let msg = json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("last.fm error");
+        return Err(format!("last.fm: {msg} ({err})"));
+    }
+    let raw = json
+        .pointer("/lyrics/lyrics")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if raw.trim().is_empty() || is_placeholder(&raw) {
+        return Ok(None);
+    }
+    let lines = crate::lyrics::parse_lrc(&raw);
+    if lines.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(lines))
+}
+
+fn is_placeholder(raw: &str) -> bool {
+    let trimmed = raw.trim().to_lowercase();
+    if trimmed.is_empty() {
+        return true;
+    }
+    const PLACEHOLDERS: &[&str] = &[
+        "this song is unavailable",
+        "these lyrics are not available",
+        "lyrics not available",
+        "add lyrics",
+        "no lyrics available",
+        "sorry, we don't have lyrics for this track yet",
+    ];
+    PLACEHOLDERS.iter().any(|p| trimmed.contains(p))
 }
 
 fn json_text(v: &Value) -> String {
@@ -193,6 +255,64 @@ mod tests {
         assert_eq!(if secs >= 60_000 { secs } else { secs * 1000 }, 242_000);
         let ms = as_u64_value(&serde_json::json!("226000")).unwrap();
         assert_eq!(if ms >= 60_000 { ms } else { ms * 1000 }, 226_000);
+    }
+
+    #[test]
+    fn synced_transcript_lines_are_parsed() {
+        let json = serde_json::json!({
+            "lyrics": {
+                "artist": "Rick Astley",
+                "track": "Never Gonna Give You Up",
+                "title": "Rick Astley - Never Gonna Give You Up",
+                "lyrics": "[00:12.34] Never gonna give you up\n[00:15.00] Never gonna let you down",
+                "attribution": "Lyrics: Rick Astley",
+                "flags": "LRC"
+            }
+        });
+        let lines = parse_lyrics_body(&json).unwrap().unwrap();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].time, 12_340);
+        assert_eq!(lines[0].text, "Never gonna give you up");
+        assert_eq!(lines[1].time, 15_000);
+    }
+
+    #[test]
+    fn placeholders_and_unsynced_text_yield_none() {
+        assert!(parse_lyrics_body(&serde_json::json!({})).unwrap().is_none());
+        assert!(parse_lyrics_body(&serde_json::json!({
+            "lyrics": { "lyrics": "This song is unavailable in this country" }
+        }))
+        .unwrap()
+        .is_none());
+        assert!(parse_lyrics_body(&serde_json::json!({
+            "lyrics": { "lyrics": "  " }
+        }))
+        .unwrap()
+        .is_none());
+        assert!(
+            parse_lyrics_body(&serde_json::json!({
+                "lyrics": { "lyrics": "just plain words with no timestamps at all" }
+            }))
+            .unwrap()
+            .is_none(),
+            "unsynced text cannot drive a line-by-line status"
+        );
+    }
+
+    #[test]
+    fn missing_track_is_reported_as_api_error() {
+        let json = serde_json::json!({
+            "message": "Track not found",
+            "error": 6
+        });
+        let err = parse_lyrics_body(&json).unwrap_err();
+        assert!(format!("{err:?}").contains("Track not found"));
+    }
+
+    #[test]
+    fn missing_api_key_is_rejected_without_a_request() {
+        let err = fetch_lyrics("", "Artist", "Track").unwrap_err();
+        assert!(err.contains("api key"));
     }
 
     #[test]

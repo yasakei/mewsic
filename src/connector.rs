@@ -5,8 +5,6 @@ use crate::net;
 const DISCORD_API: &str = "https://discord.com/api/v10";
 const SPOTIFY_API: &str = "https://api.spotify.com/v1";
 
-/// Discord drops a custom status once `expires_at` passes; the engine refreshes
-/// it before this lapses during long gaps between lyric lines.
 pub const STATUS_EXPIRY_SECS: i64 = 60;
 
 #[derive(Debug)]
@@ -23,6 +21,7 @@ pub struct PlayerState {
     pub track_id: String,
     pub name: String,
     pub artist: String,
+    pub youtube_id: Option<String>,
 }
 
 pub fn fetch_spotify_token(discord_token: &str) -> Result<String, FetchError> {
@@ -113,6 +112,7 @@ pub fn fetch_player(spotify_token: &str) -> Result<Option<PlayerState>, FetchErr
             .unwrap_or("")
             .to_string(),
         artist,
+        youtube_id: None,
     }))
 }
 
@@ -197,19 +197,11 @@ pub fn patch_status(discord_token: &str, text: &str, emoji: &str) -> Result<(), 
     Ok(())
 }
 
-/// Parses the configured emoji into the Discord `(emoji_name, emoji_id)` pair.
-///
-/// A plain unicode emoji like `🎧` becomes `("🎧", None)` — Discord renders
-/// standard emoji with `emoji_id = null`. A server/custom emoji pasted as
-/// `<:pepesad:812345678901234567>` or `pepesad:812345678901234567` becomes
-/// `("pepesad", Some("812..."))`, which is how Discord expects custom emoji;
-/// without the `emoji_id` a server emoji renders as a blank/broken box.
 fn parse_emoji(emoji: &str) -> (String, Option<String>) {
     let trimmed = emoji.trim();
     if trimmed.is_empty() {
         return (String::new(), None);
     }
-    // Discord mention syntax: <:name:id> (and <a:name:id> for animated).
     if let Some(rest) = trimmed.strip_prefix('<') {
         let inner = rest.strip_suffix('>').unwrap_or(rest);
         let inner = inner.trim_start_matches('a').trim_start_matches(':');
@@ -219,13 +211,11 @@ fn parse_emoji(emoji: &str) -> (String, Option<String>) {
             }
         }
     }
-    // Bare `name:id` form.
     if let Some((name, id)) = trimmed.split_once(':') {
         if !name.is_empty() && !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) {
             return (name.to_string(), Some(id.to_string()));
         }
     }
-    // Treat as a plain unicode emoji.
     (trimmed.to_string(), None)
 }
 
@@ -297,7 +287,6 @@ mod tests {
 
     #[test]
     fn plain_text_falls_through_as_unicode() {
-        // Not a valid name:id pair — treat whole string as the emoji name.
         assert_eq!(parse_emoji("abc"), ("abc".to_string(), None));
     }
 }
