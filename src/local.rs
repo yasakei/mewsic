@@ -102,6 +102,13 @@ mod mpris {
         let duration_ms = meta.length_in_microseconds().unwrap_or(0) / 1000;
         let progress_ms = player.get_position_in_microseconds().unwrap_or(0) / 1000;
         let youtube_id = meta.url().and_then(crate::lyrics::youtube_id_from_url);
+        let (name, artist) = if youtube_id.is_some() {
+            crate::lyrics::split_youtube_title(&title)
+                .filter(|(_, artist)| !artist.is_empty())
+                .unwrap_or_else(|| (crate::connector::cleanup_title(&title), artist.clone()))
+        } else {
+            (crate::connector::cleanup_title(&title), artist)
+        };
         let track_id = match &youtube_id {
             Some(id) => format!("local:yt:{id}"),
             None => format!("local:{title}\0{artist}"),
@@ -111,7 +118,7 @@ mod mpris {
             progress_ms,
             duration_ms,
             track_id,
-            name: crate::connector::cleanup_title(&title),
+            name,
             artist,
             youtube_id,
         })
@@ -132,6 +139,14 @@ mod mpris {
             assert_eq!(rank(true, false), 1);
             assert_eq!(rank(false, true), 2);
             assert_eq!(rank(false, false), 3);
+        }
+
+        #[test]
+        fn youtube_title_metadata_uses_song_and_artist() {
+            let title = "ILLIT (아일릿) ‘Magnetic’ Official MV";
+            let (song, artist) = crate::lyrics::split_youtube_title(title).unwrap();
+            assert_eq!(song, "Magnetic");
+            assert_eq!(artist, "ILLIT");
         }
     }
 }
