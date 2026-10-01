@@ -40,8 +40,6 @@ pub fn romanize(text: &str) -> String {
         }
 
         if is_bengali(c) {
-            // Bengali is transliterated by bntomew (modern banglish), which
-            // replaces the generic Indic abugida table below.
             let start = i;
             while i < chars.len() && is_bengali(chars[i]) {
                 i += 1;
@@ -781,7 +779,6 @@ mod tests {
 
     #[test]
     fn korean_hangul() {
-        // Korean now via `any_ascii` per user request
         assert_eq!(romanize("안녕하세요"), "annyeonghaseyo");
         assert_eq!(romanize("사랑해"), "salanghae");
         assert_eq!(romanize("감사"), "gamsa");
@@ -803,8 +800,47 @@ mod tests {
     }
 
     #[test]
+    fn armenian() {
+        assert_eq!(romanize("բարև"), "barev");
+        assert_eq!(romanize("սեր"), "ser");
+        assert_eq!(romanize("Հայաստան"), "Hayastan");
+        assert_eq!(romanize("հայերեն"), "hayeren");
+    }
+
+    #[test]
+    fn georgian() {
+        assert_eq!(romanize("გამარჯობა"), "gamarjoba");
+        assert_eq!(romanize("მადლობა"), "madloba");
+        assert_eq!(romanize("სიყვარული"), "siqvaruli");
+        assert_eq!(romanize("საქართველო"), "sakartvelo");
+    }
+
+    #[test]
+    fn thai_approximate() {
+        assert_eq!(romanize("สวัสดี"), "swasdi");
+        assert_eq!(romanize("ขอบคุณ"), "khobkhun");
+        assert_eq!(romanize("รัก"), "rak");
+        assert_eq!(romanize("๑๒๓"), "123");
+    }
+
+    #[test]
+    fn lao_approximate() {
+        assert_eq!(romanize("ສະບາຍດີ"), "sabaydi");
+        assert_eq!(romanize("ຂອບໃຈ"), "khobaich");
+        assert_eq!(romanize("ຮັກ"), "hak");
+        assert_eq!(romanize("໑໒໓"), "123");
+    }
+
+    #[test]
+    fn khmer_approximate() {
+        assert_eq!(romanize("សួស្តី"), "suostei");
+        assert_eq!(romanize("អរគុណ"), "arkon");
+        assert_eq!(romanize("ស្រឡាញ់"), "srlanh");
+        assert_eq!(romanize("១២៣"), "123");
+    }
+
+    #[test]
     fn arabic_letters() {
-        // Arabic now uses `any_ascii` per https://crates.io/crates/any_ascii/0.1.2
         assert_eq!(romanize("كتاب"), "ktb");
         assert_eq!(romanize("سلام"), "slm");
     }
@@ -904,7 +940,6 @@ mod tests {
     #[test]
     fn builtin_table_loads_from_toml() {
         let table = Table::builtin();
-        // Arabic now handled by `any_ascii` (https://crates.io/crates/any_ascii/0.1.2), not a chart
         assert!(table.charts.len() >= 2);
         assert_eq!(table.abugidas.len(), 2);
         assert_eq!(table.chart_map('а').as_deref(), Some("a"));

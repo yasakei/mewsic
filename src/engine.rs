@@ -10,8 +10,6 @@ use crate::state::AppContext;
 use crate::sync::build_status;
 
 const DEFAULT_LASTFM_LAG_MS: u64 = 3_000;
-/// Refresh the status shortly before its `expires_at` lapses so a long
-/// instrumental gap between lyric lines doesn't blank the status out.
 const STATUS_KEEPALIVE_INTERVAL_MS: u64 =
     crate::connector::STATUS_EXPIRY_SECS.saturating_sub(15) as u64 * 1000;
 
@@ -138,7 +136,6 @@ impl Engine {
             }
         }
 
-        // Revert to the pre-lyrics status when the song is paused.
         if playing_edge_to_pause(&self.ctx) {
             let _ = self.sender.send(StatusMsg::Restore);
         }
@@ -147,9 +144,6 @@ impl Engine {
         self.maybe_keep_alive();
     }
 
-    /// Re-sends the current line when the status's `expires_at` is close to
-    /// lapsing but no new lyric has arrived, so the status doesn't blank out
-    /// during instrumental gaps longer than the expiry window.
     fn maybe_keep_alive(&self) {
         let last_send = self.ctx.shared.tracker.lock().unwrap().last_send;
         let Some(last) = last_send else { return };
@@ -292,6 +286,7 @@ fn poll_once(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerS
             poll_spotify(ctx, fetcher, poller, &token);
         }
         crate::config::Source::Lastfm => poll_lastfm(ctx, fetcher, poller),
+        crate::config::Source::Local => poll_local(ctx, fetcher, poller),
     }
 }
 
@@ -377,6 +372,69 @@ fn poll_lastfm(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut Polle
     sync_lyrics(ctx, fetcher, song_changed);
 }
 
+fn verify_track(ctx: &AppContext, state: &connector::PlayerState) -> bool {
+    if !ctx.settings.read().unwrap().local.verify_music {
+        ctx.shared.tracker.lock().unwrap().rejected_song.clear();
+        return true;
+    }
+    let (song, artist, duration) = {
+        let pb = ctx.shared.playback.lock().unwrap();
+        (
+            pb.song_name.clone(),
+            pb.song_author.clone(),
+            pb.song_duration,
+        )
+    };
+    if crate::verify::looks_like_music(ctx, &song, &artist, duration) {
+        ctx.shared.tracker.lock().unwrap().rejected_song.clear();
+        return true;
+    }
+    ctx.shared.tracker.lock().unwrap().rejected_song = state.track_id.clone();
+    {
+        let mut pb = ctx.shared.playback.lock().unwrap();
+        pb.is_playing = false;
+        pb.has_lyrics = false;
+        pb.lyrics = None;
+        pb.current_line = None;
+        pb.song_name.clear();
+        pb.song_author.clear();
+    }
+    ctx.shared.tracker.lock().unwrap().sent_lines.clear();
+    crate::log::write(&format!(
+        "ignoring \"{}\" — not found in the music catalogue",
+        song
+    ));
+    false
+}
+
+fn poll_local(ctx: &AppContext, fetcher: &mut LyricsFetcher, poller: &mut PollerState) {
+    let preferred = ctx.settings.read().unwrap().local.preferred_player.clone();
+    match crate::local::fetch_player(&preferred) {
+        Some(state) => {
+            poller.last_logged_source = None;
+            let rejected = ctx.shared.tracker.lock().unwrap().rejected_song.clone();
+            if rejected == state.track_id {
+                return;
+            }
+            let song_changed = apply_state(ctx, &state, Some(state.progress_ms));
+            if song_changed {
+                fix_youtube_metadata(ctx, fetcher, &state);
+            }
+            if !verify_track(ctx, &state) {
+                return;
+            }
+            sync_lyrics(ctx, fetcher, song_changed);
+        }
+        None => {
+            if poller.last_logged_source != Some(crate::config::Source::Local) {
+                crate::log::write("local source selected but no player found");
+                poller.last_logged_source = Some(crate::config::Source::Local);
+            }
+            ctx.shared.playback.lock().unwrap().is_playing = false;
+        }
+    }
+}
+
 fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Option<u64>) -> bool {
     let mut playback = ctx.shared.playback.lock().unwrap();
     let song_changed = playback.song_id != state.track_id;
@@ -392,6 +450,7 @@ fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Op
         playback.song_id = state.track_id.clone();
         playback.song_name = connector::cleanup_title(&state.name);
         playback.song_author = state.artist.clone();
+        playback.youtube_id = state.youtube_id.clone();
         playback.lyrics = None;
         playback.current_line = None;
         playback.has_lyrics = false;
@@ -402,6 +461,37 @@ fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Op
     song_changed
 }
 
+fn fix_youtube_metadata(
+    ctx: &AppContext,
+    fetcher: &mut LyricsFetcher,
+    state: &connector::PlayerState,
+) {
+    let Some(video_id) = state.youtube_id.clone() else {
+        return;
+    };
+    let Some((song, artist)) = fetcher.video_title_artist(&video_id) else {
+        return;
+    };
+    if !crate::lyrics::video_matches_song(&state.name, &state.artist, &song) {
+        return;
+    }
+    if song.trim().is_empty() {
+        return;
+    }
+    let mut pb = ctx.shared.playback.lock().unwrap();
+    pb.song_name = song;
+    if !artist.trim().is_empty() {
+        pb.song_author = artist;
+    }
+    if pb.song_duration == 0 {
+        if let Some(meta) = crate::lyrics::video_meta(&video_id) {
+            if meta.length_ms > 0 {
+                pb.song_duration = meta.length_ms;
+            }
+        }
+    }
+}
+
 fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool) {
     let lyrics_settings = ctx.settings.read().unwrap().lyrics.clone();
 
@@ -410,12 +500,36 @@ fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool
         return;
     }
 
-    let (name, artist) = {
+    let (name, artist, duration, youtube_id) = {
         let pb = ctx.shared.playback.lock().unwrap();
-        (pb.song_name.clone(), pb.song_author.clone())
+        (
+            pb.song_name.clone(),
+            pb.song_author.clone(),
+            pb.song_duration,
+            pb.youtube_id.clone(),
+        )
     };
     if name.is_empty() {
         return;
+    }
+
+    let yt_enabled = lyrics_settings.providers.iter().any(|p| p == "youtube");
+
+    if let Some(video_id) = youtube_id.clone().filter(|_| yt_enabled) {
+        if let Some((lines, source)) =
+            fetcher.fetch_youtube_exact(&video_id, lyrics_settings.romanize, &name, &artist)
+        {
+            let mut pb = ctx.shared.playback.lock().unwrap();
+            pb.lyrics = Some(lines);
+            pb.has_lyrics = true;
+            pb.current_line = None;
+            *ctx.shared.lyric_source.lock().unwrap() = source.clone();
+            crate::log::write(&format!(
+                "lyrics for \"{}\" from {source} (video {video_id})",
+                pb.song_name
+            ));
+            return;
+        }
     }
 
     if let Some(cached) = fetcher.read_cache(&name, &artist, lyrics_settings.romanize) {
@@ -432,7 +546,13 @@ fn sync_lyrics(ctx: &AppContext, fetcher: &mut LyricsFetcher, song_changed: bool
         return;
     }
 
-    let result = fetcher.fetch(&name, &artist, &lyrics_settings);
+    let result = fetcher.fetch(
+        &name,
+        &artist,
+        duration,
+        &lyrics_settings,
+        &ctx.settings.read().unwrap().lastfm.api_key,
+    );
 
     let mut pb = ctx.shared.playback.lock().unwrap();
     match result {
@@ -490,9 +610,6 @@ pub fn last_latency(ctx: &AppContext) -> u64 {
     ctx.shared.tracker.lock().unwrap().last_latency
 }
 
-/// Detects the playing -> paused transition, updating the tracked previous
-/// state. Returns true exactly once per pause so the status is reverted
-/// rather than spamming Discord.
 fn playing_edge_to_pause(ctx: &AppContext) -> bool {
     let mut tracker = ctx.shared.tracker.lock().unwrap();
     let playing = ctx.shared.playback.lock().unwrap().is_playing;
@@ -523,21 +640,16 @@ mod tests {
     #[test]
     fn pause_edge_fires_only_on_the_transition() {
         let ctx = test_ctx();
-        // Starts paused: no edge.
         set_playing(&ctx, false);
         assert!(!playing_edge_to_pause(&ctx));
 
-        // Start playing: no edge.
         set_playing(&ctx, true);
         assert!(!playing_edge_to_pause(&ctx));
 
-        // Pause: fires exactly once.
         set_playing(&ctx, false);
         assert!(playing_edge_to_pause(&ctx));
-        // Second tick while still paused: no repeat.
         assert!(!playing_edge_to_pause(&ctx));
 
-        // Resume, then pause again: fires again.
         set_playing(&ctx, true);
         assert!(!playing_edge_to_pause(&ctx));
         set_playing(&ctx, false);
@@ -581,6 +693,77 @@ mod tests {
     }
 
     #[test]
+    fn verification_toggle_defaults_off_and_bypasses_check() {
+        let ctx = test_ctx();
+        assert!(
+            !ctx.settings.read().unwrap().local.verify_music,
+            "filtering must be opt-in so real songs are never hidden"
+        );
+        {
+            let mut settings = ctx.settings.write().unwrap();
+            settings.local.verify_music = false;
+        }
+        let state = connector::PlayerState {
+            track_id: "local:drama".to_string(),
+            name: "Drama Clip".to_string(),
+            artist: "EKHON TV".to_string(),
+            ..connector::PlayerState::default()
+        };
+        assert!(
+            verify_track(&ctx, &state),
+            "disabling verification must never reject a track"
+        );
+        assert!(ctx.shared.tracker.lock().unwrap().rejected_song.is_empty());
+    }
+
+    #[test]
+    fn rejected_track_stays_rejected_on_later_polls() {
+        let ctx = test_ctx();
+        let state = connector::PlayerState {
+            track_id: "local:drama".to_string(),
+            name: "Drama Clip".to_string(),
+            artist: "EKHON TV".to_string(),
+            is_playing: true,
+            ..connector::PlayerState::default()
+        };
+        apply_state(&ctx, &state, Some(0));
+        assert!(ctx.shared.tracker.lock().unwrap().rejected_song.is_empty());
+
+        ctx.shared.tracker.lock().unwrap().rejected_song = state.track_id.clone();
+        assert_eq!(
+            ctx.shared.tracker.lock().unwrap().rejected_song,
+            "local:drama",
+            "a rejected track must stay rejected, not re-appear"
+        );
+    }
+
+    #[test]
+    fn youtube_metadata_fix_is_skipped_without_a_video_id() {
+        let ctx = test_ctx();
+        let mut fetcher = LyricsFetcher::new(std::path::Path::new("/nonexistent"));
+        let state = connector::PlayerState {
+            track_id: "local:ILLIT".to_string(),
+            name: "ILLIT (아일릿) 'Magnetic' Official MV".to_string(),
+            artist: "HYBE LABELS".to_string(),
+            youtube_id: None,
+            ..connector::PlayerState::default()
+        };
+        apply_state(&ctx, &state, Some(0));
+        fix_youtube_metadata(&ctx, &mut fetcher, &state);
+        let pb = ctx.shared.playback.lock().unwrap();
+        assert_eq!(pb.song_author, "HYBE LABELS");
+    }
+
+    #[test]
+    fn cleanup_title_keeps_quoted_song_but_drops_native_name() {
+        let raw = "ILLIT (아일릿) ‘Magnetic’ Official MV";
+        assert_eq!(connector::cleanup_title(raw), "ILLIT");
+        let (song, artist) = crate::lyrics::split_youtube_title(raw).unwrap();
+        assert_eq!(song, "Magnetic");
+        assert_eq!(artist, "ILLIT");
+    }
+
+    #[test]
     fn keep_alive_refreshes_last_send_on_an_expiring_status() {
         let ctx = test_ctx();
         let engine = Engine::new(ctx.clone());
@@ -597,8 +780,6 @@ mod tests {
                 text: "still playing".to_string(),
             });
         }
-        // Simulate the last push being long enough ago that the status is
-        // about to expire.
         ctx.shared.tracker.lock().unwrap().last_send =
             Some(Instant::now() - Duration::from_millis(STATUS_KEEPALIVE_INTERVAL_MS + 10_000));
 

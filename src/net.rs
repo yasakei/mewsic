@@ -31,8 +31,6 @@ pub fn lastfm_agent() -> &'static Agent {
     AGENT.get_or_init(|| build_agent(Duration::from_secs(8)))
 }
 
-/// Best-effort, short-lived request for anonymous usage telemetry. Fails
-/// silently so a hiccup never blocks or slows down startup.
 pub fn usage_agent() -> &'static Agent {
     static AGENT: std::sync::OnceLock<Agent> = std::sync::OnceLock::new();
     AGENT.get_or_init(|| build_agent(Duration::from_secs(3)))
