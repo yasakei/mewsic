@@ -20,17 +20,24 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 const PANEL_HTML: &str = include_str!("../static/panel.html");
 
 pub fn open_browser() {
-    // OS-specific handler via `opener` (xdg-open/open/start) — best-effort, no crash on headless
     let url = PANEL_URL;
     if opener::open(url).is_err() {
-        // Fallback manual OS handlers if opener fails (e.g. minimal container)
         #[cfg(target_os = "linux")]
         {
             let _ = std::process::Command::new("xdg-open")
                 .arg(url)
                 .spawn()
-                .or_else(|_| std::process::Command::new("gio").arg("open").arg(url).spawn())
-                .or_else(|_| std::process::Command::new("sensible-browser").arg(url).spawn());
+                .or_else(|_| {
+                    std::process::Command::new("gio")
+                        .arg("open")
+                        .arg(url)
+                        .spawn()
+                })
+                .or_else(|_| {
+                    std::process::Command::new("sensible-browser")
+                        .arg(url)
+                        .spawn()
+                });
         }
         #[cfg(target_os = "macos")]
         {
@@ -162,22 +169,14 @@ fn verify_local_request(headers: &[String]) -> Option<Response> {
         body: reason.as_bytes().to_vec(),
     };
 
-    // Host must be localhost. DNS rebinding rides a real browser, which
-    // resolves an attacker's domain to 127.0.0.1 but still sends the
-    // attacker's Host header — rejecting anything non-local stops it.
     if let Some(host) = locate_header(headers, "host") {
         if !host_is_local(host) {
             return Some(forbidden("forbidden host"));
         }
     }
 
-    // Browsers always send Origin on cross-site POSTs (even `no-cors`
-    // fetches). A same-origin request from the panel is the only valid one.
     if let Some(origin) = locate_header(headers, "origin") {
-        let local_origins = [
-            "http://localhost:8999",
-            "http://127.0.0.1:8999",
-        ];
+        let local_origins = ["http://localhost:8999", "http://127.0.0.1:8999"];
         if !local_origins.contains(&origin) {
             return Some(forbidden("forbidden origin"));
         }
@@ -188,12 +187,15 @@ fn verify_local_request(headers: &[String]) -> Option<Response> {
 
 fn host_is_local(host: &str) -> bool {
     let host = host.trim();
-    let (name, port) = match host.rsplit_once(':') {
-        Some((n, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (n, Some(p)),
-        _ => (host, None),
+    let name = if host.contains("::") && !host.starts_with('[') {
+        host
+    } else {
+        match host.rsplit_once(':') {
+            Some((n, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => n,
+            _ => host,
+        }
     };
-    let _ = port;
-    matches!(name, "127.0.0.1" | "localhost" | "[::1]")
+    matches!(name, "127.0.0.1" | "localhost" | "[::1]" | "::1")
 }
 
 struct Response {
@@ -315,24 +317,85 @@ mod tests {
     }
 
     #[test]
+    fn panel_supports_provider_ranking() {
+        for hook in [
+            "initProviderReorder",
+            "collectLyricsProviders",
+            "applyProviderOrder",
+            "renderProviderRanks",
+            "moveProvider",
+        ] {
+            assert!(PANEL_HTML.contains(hook), "panel must define {hook}");
+        }
+        assert!(PANEL_HTML.contains("dragstart"));
+        assert!(
+            PANEL_HTML.contains("plistOrder()"),
+            "order must come from the DOM"
+        );
+    }
+
+    #[test]
+    fn panel_flags_experimental_providers_and_sources() {
+        let lower = PANEL_HTML.to_lowercase();
+        assert!(
+            lower.contains("> last.fm transcript <span class=\"exp\""),
+            "last.fm badge"
+        );
+        assert!(
+            lower.contains("> youtube captions <span class=\"exp\""),
+            "youtube badge"
+        );
+        assert!(
+            lower.contains("value=\"local\">local player"),
+            "local option"
+        );
+        assert!(
+            lower.contains("— experimental"),
+            "local source must be flagged in the dropdown"
+        );
+        assert_eq!(
+            lower.matches("class=\"exp\"").count(),
+            2,
+            "exactly two badges"
+        );
+    }
+
+    #[test]
+    fn panel_provider_order_covers_every_builtin() {
+        let mut seen = Vec::new();
+        let needle = "class=\"pitem\" data-id=\"";
+        let mut rest = PANEL_HTML;
+        while let Some(i) = rest.find(needle) {
+            let start = i + needle.len();
+            let id: String = rest[start..].chars().take_while(|c| *c != '"').collect();
+            seen.push(id.clone());
+            rest = &rest[start + id.len()..];
+        }
+        for id in crate::config::LyricsSettings::BUILTIN {
+            assert!(seen.iter().any(|s| s == id), "missing draggable row: {id}");
+        }
+        assert!(seen.contains(&"custom".to_string()));
+        assert_eq!(seen.len(), 6, "one row per provider, no duplicates");
+    }
+
+    #[test]
     fn local_host_is_accepted() {
         assert!(host_is_local("127.0.0.1:8999"));
         assert!(host_is_local("localhost:8999"));
         assert!(host_is_local("127.0.0.1"));
         assert!(host_is_local("localhost"));
         assert!(host_is_local("[::1]:8999"));
+        assert!(host_is_local("::1"));
         assert!(!host_is_local("evil.example.com"));
         assert!(!host_is_local("evil.example.com:8999"));
     }
 
     #[test]
     fn rebinding_and_cors_requests_are_forbidden() {
-        // DNS rebinding: real browser, attacker-controlled Host.
         let rebinding = vec!["Host: evil.example.com:8999".to_string()];
         let resp = verify_local_request(&rebinding).unwrap();
         assert_eq!(resp.status, 403);
 
-        // Cross-origin POST from any website (Origin is always sent).
         let cross_site = vec![
             "Host: 127.0.0.1:8999".to_string(),
             "Origin: https://evil.example.com".to_string(),
@@ -340,7 +403,6 @@ mod tests {
         let resp = verify_local_request(&cross_site).unwrap();
         assert_eq!(resp.status, 403);
 
-        // Null origin (sandboxed iframe / data: URL) is not trusted.
         let null_origin = vec![
             "Host: 127.0.0.1:8999".to_string(),
             "Origin: null".to_string(),
@@ -356,11 +418,9 @@ mod tests {
         ];
         assert!(verify_local_request(&same_origin).is_none());
 
-        // CLI tools like curl omit Origin.
         let curl = vec!["Host: 127.0.0.1:8999".to_string()];
         assert!(verify_local_request(&curl).is_none());
 
-        // Origin using the other loopback spelling is still local.
         let other_spelling = vec![
             "Host: 127.0.0.1:8999".to_string(),
             "Origin: http://127.0.0.1:8999".to_string(),

@@ -1,457 +1,452 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mewsic · control panel</title>
-<script>
-  tailwind.config = {
-    darkMode: 'class',
-    theme: { extend: {} }
-  };
-</script>
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    document.documentElement.classList.add('dark');
-  }
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-    document.documentElement.classList.toggle('dark', e.matches);
-  });
-</script>
 <style>
   :root {
-    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    --sans: "Segoe UI", "Noto Sans", "Liberation Sans", Arial, sans-serif;
+    --bg: #f6f6f8;
+    --card: #ffffff;
+    --surface: #fafafa;
+    --ink: #24232a;
+    --muted: #73717e;
+    --line: #e7e6ed;
+    --accent: #7560bd;
+    --accent-soft: #f1edf9;
+    --good: #27825d;
+    --bad: #c34b56;
+    --switch-off: #ceccd6;
+    --radius: 12px;
   }
-  body { font-family: var(--sans); }
-
-  .dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #a1a1aa; display: inline-block;
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141418;
+    --card: #1b1b20;
+    --surface: #17171c;
+    --ink: #eeedf3;
+    --muted: #a09dab;
+    --line: #303037;
+    --accent: #b0a0e5;
+    --accent-soft: #2b263b;
+    --good: #85c7a5;
+    --bad: #ed8b97;
+    --switch-off: #494750;
   }
-  .dot.on {
-    background: #10b981;
-    box-shadow: 0 0 8px rgba(16, 185, 129, .7);
-    animation: pulse 1.6s infinite;
+  *, *::before, *::after { box-sizing: border-box; }
+  html { min-width: 320px; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; font-family: var(--sans); font-size: 14px; line-height: 1.5;
+    background: var(--bg); color: var(--ink);
+    -webkit-font-smoothing: antialiased;
   }
-  .dot.off { background: #ef4444; }
-  @keyframes pulse { 50% { opacity: .4; } }
-
-  .saved-flag {
-    position: fixed; bottom: 22px; right: 22px;
-    background: #10b981; color: #04140c;
-    font-family: var(--mono); font-size: 12px; font-weight: 700;
-    padding: 10px 16px; border-radius: 999px;
-    opacity: 0; transform: translateY(8px); transition: all .3s;
-    pointer-events: none; box-shadow: 0 6px 20px rgba(16, 185, 129, .35);
-    z-index: 50;
+  ::selection { background: var(--accent); color: var(--bg); }
+  button, input, select, textarea { font: inherit; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 24px 28px 40px; }
+  header.top {
+    display: flex; align-items: center; gap: 12px;
+    padding-bottom: 20px; margin-bottom: 20px;
+    border-bottom: 1px solid var(--line);
   }
-  .saved-flag.show { opacity: 1; transform: translateY(0); }
-
-  #checkToken {
-    display: inline-flex; align-items: center; justify-content: center;
-    height: 36px; padding: 0 14px; border-radius: 8px;
-    border: 1px solid #d4d4d8; background: #fff; color: #18181b;
-    font-family: var(--mono); font-size: 12px; font-weight: 500;
-    cursor: pointer; transition: all .15s; white-space: nowrap;
+  h1.wordmark {
+    font-size: 27px; margin: 0; letter-spacing: -.055em; line-height: 1;
+    font-weight: 700; font-family: Georgia, "Times New Roman", serif;
+    display: flex; align-items: center; gap: 10px;
   }
-  #checkToken:hover { border-color: #8b5cf6; color: #8b5cf6; background: #fafafa; }
-  #checkToken:disabled { opacity: .6; cursor: default; }
-  #checkToken.ok { border-color: #10b981; color: #10b981; }
-  #checkToken.err { border-color: #ef4444; color: #ef4444; }
-  html.dark #checkToken {
-    border-color: #3f3f46; background: #18181b; color: #e4e4e7;
+  h1.wordmark svg {
+    width: .72em; height: .72em; display: block; overflow: visible; flex-shrink: 0;
+    color: var(--ink);
   }
-  html.dark #checkToken:hover { border-color: #a78bfa; color: #a78bfa; background: #1f1f23; }
-  html.dark #checkToken.ok { border-color: #34d399; color: #34d399; }
-  html.dark #checkToken.err { border-color: #f87171; color: #f87171; }
-
-  :root {
-    --ink: #171717;
-    --paper: #f6f1e8;
-    --card: #fffdf8;
-    --line: #171717;
-    --acid: #d7ff45;
-    --pink: #ff86c8;
-    --blue: #78c8ff;
-    --orange: #ff9d4d;
-    --violet: #9b7bff;
-    --mint: #83e6c0;
-    --shadow: 7px 7px 0 var(--ink);
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--muted); padding: 6px 0 6px 6px; min-height: 32px;
+    font-size: 12px; font-weight: 500; white-space: nowrap;
   }
-  html.dark {
-    --ink: #171717;
-    --paper: #171717;
-    --card: #fffdf8;
-    --line: #171717;
-    --shadow: 7px 7px 0 #f8f3ea;
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; flex-shrink: 0; }
+  .dot.on { background: var(--good); }
+  .dot.off { background: var(--bad); }
+  .icon-btn {
+    display: inline-grid; place-items: center; flex-shrink: 0;
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    border-radius: 8px; width: 34px; height: 34px; padding: 0; cursor: pointer;
+    transition: background .18s, color .18s, border-color .18s;
   }
-  body { background: var(--paper) !important; color: var(--ink) !important; }
-  body > div:first-of-type {
-    max-width: 1180px !important;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 22px;
-    padding-top: 28px !important;
-    padding-bottom: 52px !important;
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  #updBanner {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 8px; overflow-wrap: anywhere;
+    padding: 12px 16px; font-size: 12px; margin: 0 0 16px;
   }
-  header {
-    grid-column: 1 / -1;
-    margin-bottom: 2px !important;
-    padding: 0 0 20px !important;
-    border-bottom: 3px solid var(--line) !important;
+  #updBanner.hidden { display: none; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 20px;
+    margin: 0; min-width: 0; height: 100%;
   }
-  html.dark header { border-color: #f8f3ea !important; }
-  header > div:first-child {
-    height: 48px !important; width: 64px !important; border-radius: 0 !important;
-    padding: 9px 12px !important; background: var(--acid) !important; color: var(--ink) !important;
-    border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line);
-    font-family: var(--mono); font-size: 13px !important; letter-spacing: .12em;
-    justify-content: center;
+  .card.span2 { grid-column: 1 / -1; }
+  .card h2 {
+    font-size: 14px; line-height: 1.4; font-weight: 600; letter-spacing: -.01em;
+    color: var(--ink); margin: 0 0 14px;
   }
-  .cat-mark { width: 42px; height: 36px; display: block; }
-  .cat-mark .face { fill: var(--acid); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
-  .cat-mark .ear { fill: var(--pink); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
-  .cat-mark .eye, .cat-mark .nose, .cat-mark .mouth { fill: var(--ink); }
-  .cat-mark .highlight { fill: var(--acid); }
-  .cat-mark .whisker { stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; }
-  header h1 { font-size: 28px !important; line-height: 1 !important; text-transform: uppercase; letter-spacing: -.04em !important; }
-  header p { color: var(--ink) !important; opacity: .68; font-family: var(--mono); font-size: 11px !important; }
-  html.dark header h1, html.dark header p { color: #f8f3ea !important; }
-  #live { border: 3px solid var(--line) !important; border-radius: 0 !important; color: var(--ink) !important; background: var(--pink); box-shadow: 4px 4px 0 var(--line); }
-  .dot { border-radius: 0 !important; background: var(--ink); }
-  .dot.on { background: #16855d; box-shadow: none; }
-  .dot.off { background: #d44545; }
-  #updBanner { grid-column: 1 / -1; margin: 0 !important; border: 3px solid var(--line) !important; border-radius: 0 !important; background: var(--orange) !important; color: var(--ink) !important; box-shadow: var(--shadow); }
-  section { margin: 0 !important; border: 3px solid var(--line) !important; border-radius: 0 !important; background: var(--card) !important; box-shadow: var(--shadow); }
-  section:nth-of-type(1) { grid-column: 1 / -1; background: var(--blue) !important; }
-  section:nth-of-type(2) { grid-column: 1; background: var(--card) !important; }
-  section:nth-of-type(3) { grid-column: 2; background: var(--mint) !important; }
-  section:nth-of-type(4) { grid-column: 1; background: var(--card) !important; }
-  section:nth-of-type(5) { grid-column: 2; background: var(--orange) !important; }
-  section:nth-of-type(6) { grid-column: 1 / -1; background: var(--violet) !important; }
-  section > h2 { color: var(--ink) !important; opacity: .72; letter-spacing: .2em !important; border-bottom: 2px solid var(--line); padding-bottom: 10px; }
-  section:nth-of-type(1) > h2 { opacity: 1; }
-  section:nth-of-type(1) #npTitle { font-size: 31px; line-height: 1.05; letter-spacing: -.04em; }
-  section:nth-of-type(1) #npArtist { color: var(--ink) !important; opacity: .72; }
-  section:nth-of-type(1) #npBar { background: var(--ink) !important; border-radius: 0 !important; }
-  section:nth-of-type(1) .h-1\.5 { background: rgba(23,23,23,.2) !important; border-radius: 0 !important; }
-  #npLine, #preview { border: 2px dashed var(--line) !important; border-radius: 0 !important; background: rgba(255,255,255,.35) !important; color: var(--ink) !important; }
-  section .text-zinc-400, section .text-zinc-500, section .text-zinc-600,
-  section .text-zinc-300, section .text-zinc-100,
-  label, section p, small, section span, section b { color: var(--ink) !important; }
-  section label, section p, section small { opacity: .92; line-height: 1.35; }
-  section label { font-weight: 650 !important; }
-  section > .divide-y > div > label, section > div > div > label { white-space: nowrap; }
-  section > .divide-y > div > small, section > p { display: block; width: calc(100% - 176px) !important; margin-left: 176px !important; padding-left: 0 !important; }
-  section b { opacity: 1; }
-  section input::placeholder, section textarea::placeholder { color: var(--ink) !important; opacity: .52; }
-  section > .divide-y > div > label, section > div > div > label { min-width: 164px; }
-  #lastfmRow label { min-width: 164px; }
-  #npTime, #npSource, #npPing, #npAuto { opacity: .8; }
-  input, select, textarea { border: 2px solid var(--line) !important; border-radius: 0 !important; background: var(--card) !important; color: var(--ink) !important; box-shadow: 3px 3px 0 var(--line); }
-  input:focus, select:focus, textarea:focus { border-color: var(--line) !important; box-shadow: 4px 4px 0 var(--line) !important; outline: 2px solid var(--acid) !important; }
-  #checkToken { height: 36px; border: 2px solid var(--line) !important; border-radius: 0 !important; background: var(--acid) !important; color: var(--ink) !important; box-shadow: 3px 3px 0 var(--line); }
-  #checkToken:hover { border-color: var(--line) !important; color: var(--ink) !important; background: var(--pink) !important; }
-  #checkToken.ok { background: var(--mint) !important; border-color: var(--line) !important; color: var(--ink) !important; }
-  #checkToken.err { background: #ff6868 !important; border-color: var(--line) !important; color: var(--ink) !important; }
-  .peer + div { border-radius: 0 !important; border: 2px solid var(--line); background: rgba(255,255,255,.45) !important; }
-  .peer:checked + div { background: #f04f9d !important; border-color: var(--line) !important; }
-  .peer + div::after { border-radius: 0 !important; background: #fffdf8 !important; box-shadow: none !important; }
-  .saved-flag { right: 24px; bottom: 24px; border: 3px solid var(--line); border-radius: 0; background: var(--acid); color: var(--ink); box-shadow: 5px 5px 0 var(--line); }
-  @media (max-width: 800px) {
-    body > div:first-of-type { display: block; padding: 18px !important; }
-    header { margin-bottom: 20px !important; }
-    section, #updBanner { margin-bottom: 20px !important; }
-    section > .divide-y > div > small, section > p { width: 100% !important; margin-left: 0 !important; }
+  .card.now { position: relative; }
+  .player-heading { margin-bottom: 12px; }
+  .card.now h2 {
+    color: var(--muted); font-size: 11px; font-weight: 500; margin: 0;
   }
-  @media (min-width: 801px) and (max-width: 1020px) {
-    body > div:first-of-type { grid-template-columns: 1fr; }
-    section:nth-of-type(n) { grid-column: 1; }
+  .player-body, .player-info { min-width: 0; }
+  #npTitle { font-size: 21px; font-weight: 600; line-height: 1.45; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  #npArtist { color: var(--muted); margin-top: 3px; font-size: 12px; overflow-wrap: anywhere; }
+  .player-progress { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+  .bar { flex: 1; height: 3px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  #npBar { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .3s ease-out; }
+  #npTime { font-family: var(--mono); font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  #npLine {
+    margin-top: 14px; border-left: 2px solid var(--accent); padding: 2px 12px;
+    color: var(--ink); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px;
+    font-size: 10px; color: var(--muted); overflow-wrap: anywhere;
+  }
+  .meta b { color: var(--ink); font-weight: 400; margin-left: 4px; }
+  .row { display: flex; align-items: center; gap: 16px; padding: 10px 0; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row label.lbl, .row span.lbl { width: 150px; flex-shrink: 0; font-size: 13px; font-weight: 400; }
+  .row .grow { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .row .grow.end { justify-content: flex-end; }
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 3px 0 0; overflow-wrap: anywhere; }
+  .hint.indent { margin-left: 166px; }
+  input[type="text"], input[type="password"], input[type="number"], select, textarea {
+    width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px;
+    background: var(--surface); color: var(--ink);
+    min-height: 36px; padding: 8px 10px; font-size: 12px;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  input[type="number"] { max-width: 100px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  textarea { resize: vertical; line-height: 1.7; font-family: var(--mono); }
+  select { max-width: 360px; cursor: pointer; text-overflow: ellipsis; }
+  .btn {
+    min-height: 36px; padding: 8px 13px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); flex-shrink: 0;
+    font-size: 12px; font-weight: 500; white-space: nowrap;
+    transition: border-color .18s, background .18s, color .18s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  #checkToken { background: var(--accent); border-color: var(--accent); color: var(--card); }
+  #checkToken:hover:not(:disabled) { background: var(--ink); border-color: var(--ink); }
+  .btn:disabled, .pbtn:disabled { opacity: .5; cursor: default; }
+  .btn.ok, #checkToken.ok { border-color: var(--good); color: var(--good); background: var(--accent-soft); }
+  .btn.err, #checkToken.err { border-color: var(--bad); color: var(--bad); background: var(--surface); }
+  .switch { position: relative; display: inline-flex; align-items: center; min-height: 28px; cursor: pointer; flex-shrink: 0; }
+  .switch input { position: absolute; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .track {
+    display: block; width: 38px; height: 22px; border-radius: 999px; background: var(--switch-off);
+    position: relative; transition: background .18s;
+  }
+  .track::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .16); transition: transform .18s;
+  }
+  .switch input:checked + .track { background: var(--accent); }
+  [data-theme="dark"] .switch input:checked + .track::after { background: #272231; }
+  .switch input:checked + .track::after { transform: translateX(16px); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .switch input:disabled + .track { opacity: .5; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
+  .check input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .exp {
+    display: inline-block; font-size: 8px; font-weight: 600; letter-spacing: .025em;
+    color: var(--muted); line-height: 1.6; vertical-align: middle;
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 5px; white-space: nowrap;
+  }
+  .plist { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .psection { min-width: 0; margin-bottom: 8px; }
+  .phdr {
+    font-size: 12px; font-weight: 500; margin-bottom: 12px;
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px;
+  }
+  .phdr .hint { font-size: 10px; font-weight: 400; }
+  .pitem {
+    display: flex; align-items: center; gap: 7px; min-width: 0;
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 6px 8px; min-height: 40px; background: var(--surface);
+    transition: border-color .18s, box-shadow .18s, opacity .18s;
+  }
+  .pitem.dragging { opacity: .4; }
+  .pitem.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pitem.off .check { color: var(--muted); }
+  .pitem.off .rank { opacity: .45; }
+  .grip { cursor: grab; color: var(--muted); font-size: 16px; line-height: 1; user-select: none; }
+  .grip:active { cursor: grabbing; }
+  .rank {
+    font-family: var(--mono); font-size: 9px; color: var(--muted);
+    min-width: 12px; text-align: center;
+  }
+  .pitem .check { display: block; flex: 1; min-width: 0; line-height: 1.8; overflow-wrap: anywhere; }
+  .pitem .check input { vertical-align: middle; margin-right: 5px; }
+  .pitem .check .exp { margin-left: 3px; }
+  .pbtns, .grip, .rank { flex-shrink: 0; }
+  .pbtns { display: flex; gap: 4px; }
+  .pbtn {
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    border-radius: 7px; width: 28px; height: 28px; cursor: pointer;
+    font-size: 7px; line-height: 1; display: grid; place-items: center; padding: 0;
+    transition: border-color .18s, background .18s, color .18s;
+  }
+  .pbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  #preview {
+    width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--surface);
+    padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--ink);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  #savedFlag {
+    position: fixed; bottom: 24px; right: 24px; z-index: 50;
+    background: var(--ink); color: var(--bg); max-width: calc(100vw - 32px);
+    font-size: 10px; font-weight: 600; letter-spacing: .1em;
+    padding: 12px 20px; border-radius: 999px;
+    opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; pointer-events: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, .12);
+  }
+  #savedFlag.show { opacity: 1; transform: translateY(0); }
+  #savedFlag.error { background: #b6403b; color: #fff; }
+  @media (max-width: 1000px) {
+    .wrap { padding-left: 24px; padding-right: 24px; }
+    .row { gap: 12px; }
+    .row label.lbl, .row span.lbl { width: 132px; }
+    .hint.indent { margin-left: 144px; }
+    .pitem { gap: 5px; padding-left: 8px; padding-right: 8px; }
+  }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: 1fr; }
+    .row label.lbl, .row span.lbl { width: 160px; }
+    .hint.indent { margin-left: 172px; }
+    .card { height: auto; }
+    .pitem { gap: 8px; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 16px 14px 24px; }
+    header.top { gap: 10px; padding-bottom: 16px; margin-bottom: 16px; }
+    h1.wordmark { font-size: 25px; gap: 8px; }
+    .pill { font-size: 11px; }
+    .grid { gap: 12px; }
+    .card { padding: 16px; }
+    #npTitle { font-size: 18px; }
+    .meta { gap: 6px 14px; }
+    .row { flex-wrap: wrap; gap: 9px; }
+    .row label.lbl, .row span.lbl { width: 100%; font-size: 13px; }
+    .row .grow { flex-basis: 100%; flex-wrap: wrap; }
+    .row .grow.end { justify-content: flex-start; }
+    .row:has(.switch), .row:has(input[type="number"]) { flex-wrap: nowrap; }
+    .row:has(.switch) .lbl, .row:has(input[type="number"]) .lbl { width: auto; flex: 1; }
+    .row:has(.switch) .grow, .row:has(input[type="number"]) .grow { flex: 0 0 auto; justify-content: flex-end; }
+    .hint.indent { margin-left: 0; }
+    input[type="text"], input[type="password"], input[type="number"], select, textarea { font-size: 16px; }
+    #token { flex-basis: 100%; }
+    select { max-width: 100%; }
+    .pbtn { width: 30px; height: 30px; }
+    #savedFlag { bottom: 16px; right: 16px; }
+  }
+  @media (max-width: 380px) {
+    .wrap { padding-left: 12px; padding-right: 12px; }
+    h1.wordmark { font-size: 24px; gap: 6px; }
+    .pill { gap: 6px; font-size: 10px; }
+    .pitem { gap: 5px; padding: 8px; }
+    .pitem .check { font-size: 11px; }
+    .pitem .check input { margin-right: 2px; }
+    .pbtns { gap: 3px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   }
 </style>
 </head>
-<body class="min-h-screen bg-zinc-50 text-zinc-900 antialiased transition-colors dark:bg-zinc-950 dark:text-zinc-100">
-<div class="mx-auto max-w-2xl px-5 py-10 sm:px-6">
-  <header class="mb-8 flex items-center gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-    <div class="flex h-10 shrink-0 items-center rounded-xl bg-violet-600 px-3 font-mono text-sm font-bold text-white shadow-sm" aria-label="mewsic cat mascot">
-      <svg class="cat-mark" viewBox="0 0 48 40" role="img" aria-hidden="true">
-        <path class="face" d="M7 14 8 5l9 6c2-1 4-2 7-2s5 1 7 2l9-6 1 9v13c0 7-6 11-16 11S7 34 7 27Z"/>
-        <path class="ear" d="m10 9 6 4-5 2Z"/><path class="ear" d="m38 9-6 4 5 2Z"/>
-        <ellipse class="eye" cx="17" cy="22" rx="3" ry="3.5"/><ellipse class="eye" cx="31" cy="22" rx="3" ry="3.5"/>
-        <circle class="highlight" cx="18" cy="21" r=".9"/><circle class="highlight" cx="32" cy="21" r=".9"/>
-        <path class="nose" d="m22 27 2-1.5 2 1.5-2 2Z"/>
-        <path class="mouth" d="M24 29v2M24 31c-2 2-3 2-4 1M24 31c2 2 3 2 4 1" stroke="var(--ink)" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-        <path class="whisker" d="M15 27 3 24M15 30 3 30M33 27l12-3M33 30l12 0"/>
-      </svg>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div>
+      <h1 class="wordmark"><svg viewBox="70 32 132 136" role="img" aria-label="Yasakei mark"><path d="M77 39h55c38 0 62 27 62 61s-24 61-62 61H77l20-22h34c22 0 36-16 36-39s-14-39-36-39H97Z" fill="currentColor" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>Mewsic</h1>
     </div>
-    <div class="min-w-0">
-      <h1 class="text-lg font-semibold tracking-tight">mewsic</h1>
-      <p class="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">line-by-line status control deck</p>
-    </div>
-    <div class="flex-1"></div>
-    <span id="live" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-zinc-200 px-3 py-1 font-mono text-[11px] text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-      <span id="dot" class="dot"></span><span id="liveText">connecting…</span>
-    </span>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="themeBtn" title="toggle light / dark" aria-label="toggle light / dark"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+    <span class="pill" id="live"><span id="dot" class="dot"></span><span id="liveText">connecting…</span></span>
   </header>
 
-  <div id="updBanner" class="mb-5 hidden rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 font-mono text-xs text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"></div>
+  <div id="updBanner" class="hidden"></div>
 
-  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-    <h2 class="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">now playing</h2>
-    <div class="text-base font-semibold" id="npTitle">NO TRACK</div>
-    <div class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400" id="npArtist">NO ARTIST</div>
-    <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-      <i id="npBar" class="block h-full w-0 rounded-full bg-violet-600 transition-[width] duration-300 ease-out"></i>
-    </div>
-    <div class="mt-1.5 font-mono text-[11px] text-zinc-400 dark:text-zinc-500" id="npTime">0:00 / 0:00</div>
-    <div class="mt-4 min-h-11 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3.5 py-3 font-mono text-[13px] dark:border-zinc-700 dark:bg-zinc-950/60" id="npLine">WAITING FOR PLAYBACK</div>
-    <div class="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-zinc-400 dark:text-zinc-500">
-      <span>source <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npSource">NONE</b></span>
-      <span>ping <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npPing">NONE</b></span>
-      <span>autooffset <b class="font-semibold text-zinc-600 dark:text-zinc-300" id="npAuto">NONE</b></span>
-    </div>
-  </section>
-
-  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-    <h2 class="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">account</h2>
-    <div class="flex flex-wrap items-center gap-3">
-      <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="token">Discord token</label>
-      <div class="flex min-w-0 flex-1 items-center gap-2">
-        <input type="text" id="token" autocomplete="off" placeholder="paste your Discord user token"
-               class="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-        <button id="checkToken">check</button>
+  <div class="grid">
+    <section class="card span2 now" aria-label="now playing">
+      <div class="player-heading">
+        <h2>Now playing</h2>
       </div>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 pt-3.5">
-      <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="source">Music source</label>
-      <div class="flex min-w-0 flex-1 items-center gap-2">
-        <select id="source"
-                class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-2 font-mono text-[13px] outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-100">
+      <div class="player-body">
+        <div class="player-info">
+          <div id="npTitle">NO TRACK</div>
+          <div id="npArtist">NO ARTIST</div>
+        </div>
+      </div>
+      <div class="player-progress">
+        <div class="bar"><i id="npBar"></i></div>
+        <div id="npTime">0:00 / 0:00</div>
+      </div>
+      <div id="npLine">WAITING FOR PLAYBACK</div>
+      <div class="meta">
+        <span>source <b id="npSource">NONE</b></span>
+        <span>ping <b id="npPing">NONE</b></span>
+        <span>autooffset <b id="npAuto">NONE</b></span>
+      </div>
+    </section>
+
+    <section class="card span2" aria-label="account">
+      <h2>Account</h2>
+      <div class="row">
+        <label class="lbl" for="token">Discord token</label>
+        <div class="grow">
+          <input type="password" id="token" autocomplete="off" placeholder="paste your Discord user token">
+          <button class="btn" id="showToken" title="show/hide token">show</button>
+          <button class="btn" id="checkToken">check</button>
+        </div>
+      </div>
+      <div class="row">
+        <label class="lbl" for="source">Music source</label>
+        <div class="grow"><select id="source">
           <option value="spotify">Spotify via Discord</option>
           <option value="lastfm">Last.fm / YouTube Music</option>
-        </select>
+          <option value="local">Local player (MPRIS / system) — experimental</option>
+        </select></div>
       </div>
-    </div>
-    <div id="lastfmRow" class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      <div class="flex flex-wrap items-center gap-3 pt-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="lastfmKey">Last.fm API key</label>
-        <div class="flex min-w-0 flex-1 items-center justify-end">
-          <input type="text" id="lastfmKey" placeholder="free key at last.fm/api/account/create"
-                 class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+      <div id="lastfmRow">
+        <div class="row">
+          <label class="lbl" for="lastfmKey">Last.fm API key</label>
+          <div class="grow"><input type="text" id="lastfmKey" placeholder="free key at last.fm/api/account/create"></div>
+        </div>
+        <div class="row">
+          <label class="lbl" for="lastfmUser">Last.fm username</label>
+          <div class="grow"><input type="text" id="lastfmUser" placeholder="your last.fm username"></div>
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-3 pt-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="lastfmUser">Last.fm username</label>
-        <div class="flex min-w-0 flex-1 items-center justify-end">
-          <input type="text" id="lastfmUser" placeholder="your last.fm username"
-                 class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
+      <div id="localRow">
+        <div class="row">
+          <label class="lbl" for="localPref">Preferred player</label>
+          <div class="grow"><input type="text" id="localPref" placeholder="e.g. spotify, empty = first playing wins">
+        </div></div>
+        <div class="row">
+          <label class="lbl" for="verifyMusic">Hide non-music</label>
+          <div class="grow end"><label class="switch"><input type="checkbox" id="verifyMusic"><span class="track"></span></label></div>
         </div>
       </div>
-    </div>
-    <p class="mt-2 text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Settings are stored in settings.toml; the Discord token lives in your OS keychain, not in plaintext. Last.fm covers YouTube Music and any player that scrobbles (WebScrobbler, YT Music desktop).</p>
-  </section>
+      <p class="hint indent">Token lives in your OS keychain, never in plaintext. Last.fm covers YouTube Music and any scrobbling player. Local reads the player on this machine with exact position.</p>
+    </section>
 
-  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">status</h2>
-    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="timestamp">Playback timestamp</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="timestamp" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="label">Show "Song lyrics -" label</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="label" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoClear">Clear on song switch</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="autoClear" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="emoji">Emoji</label>
-        <div class="flex min-w-0 flex-1 items-center justify-end">
-          <input type="text" id="emoji" placeholder="optional, empty = none"
-                 class="h-9 w-full max-w-[220px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="advanced">Advanced template</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="advanced" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5" id="advRow" style="display:none">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="advEmoji">Template emoji</label>
-        <div class="flex min-w-0 flex-1 items-center justify-end">
-          <input type="text" id="advEmoji" placeholder="optional"
-                 class="h-9 w-full max-w-[220px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5" id="advTemplateRow" style="display:none">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="advTemplate">Template</label>
-        <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-          <textarea id="advTemplate" rows="3" class="w-full resize-y rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500"></textarea>
-          <small class="text-[11px] text-zinc-400 dark:text-zinc-500">{lyrics} {song_name} {song_author} {timestamp} + _upper/_lower/_cropped/_letters_only variants · cropped to 128 chars</small>
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <span class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300">Preview</span>
-        <div class="min-w-0 flex-1">
-          <div id="preview" class="whitespace-pre-wrap break-words rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3.5 py-3 font-mono text-[13px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-400"></div>
-        </div>
-      </div>
-    </div>
-  </section>
+    <section class="card" aria-label="status">
+      <h2>Status</h2>
+      <div class="row"><label class="lbl" for="timestamp">Timestamp</label><div class="grow end"><label class="switch"><input type="checkbox" id="timestamp"><span class="track"></span></label></div></div>
+      <div class="row"><label class="lbl" for="label">“Song lyrics –” label</label><div class="grow end"><label class="switch"><input type="checkbox" id="label"><span class="track"></span></label></div></div>
+      <div class="row"><label class="lbl" for="autoClear">Clear on song switch</label><div class="grow end"><label class="switch"><input type="checkbox" id="autoClear"><span class="track"></span></label></div></div>
+      <div class="row"><label class="lbl" for="emoji">Emoji</label><div class="grow"><input type="text" id="emoji" placeholder="optional, empty = none"></div></div>
+      <div class="row"><label class="lbl" for="advanced">Advanced template</label><div class="grow end"><label class="switch"><input type="checkbox" id="advanced"><span class="track"></span></label></div></div>
+      <div class="row" id="advRow" style="display:none"><label class="lbl" for="advEmoji">Template emoji</label><div class="grow"><input type="text" id="advEmoji" placeholder="optional"></div></div>
+      <div class="row" id="advTemplateRow" style="display:none"><label class="lbl" for="advTemplate">Template</label><div class="grow"><textarea id="advTemplate" rows="3"></textarea></div></div>
+      <p class="hint">{lyrics} {song_name} {song_author} {timestamp} + _upper/_lower/_cropped/_letters_only · max 128 chars</p>
+      <div class="row"><span class="lbl">Preview</span><div class="grow"><div id="preview"></div></div></div>
+    </section>
 
-  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">lyrics</h2>
-    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <span class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300">Providers</span>
-        <div class="flex min-w-0 flex-1 flex-col gap-2">
-          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provLrclib" value="lrclib" class="h-4 w-4 accent-violet-600"> LrcLib</label>
-          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provNetease" value="netease" class="h-4 w-4 accent-violet-600"> NetEase Music</label>
-          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provQqmusic" value="qqmusic" class="h-4 w-4 accent-violet-600"> QQ Music</label>
-          <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="provCustom" value="custom" class="h-4 w-4 accent-violet-600"> Custom</label>
+    <section class="card" aria-label="lyrics">
+      <h2>Lyrics</h2>
+      <div class="psection">
+        <div class="phdr">Providers <span class="hint" style="display:inline">drag to reorder · top is tried first</span></div>
+        <div class="plist" id="plist">
+          <div class="pitem" data-id="lrclib" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provLrclib" value="lrclib"> LrcLib</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
+          <div class="pitem" data-id="netease" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provNetease" value="netease"> NetEase Music</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
+          <div class="pitem" data-id="qqmusic" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provQqmusic" value="qqmusic"> QQ Music</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
+          <div class="pitem" data-id="youtube" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provYoutube" value="youtube"> YouTube captions <span class="exp">experimental</span></label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
+          <div class="pitem" data-id="lastfm" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provLastfm" value="lastfm"> Last.fm transcript <span class="exp">experimental</span></label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
+          <div class="pitem" data-id="custom" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provCustom" value="custom"> Custom</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="romanize">Romanize lyrics</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="romanize" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Turns Japanese/Korean/Hindi/Bangla/Cyrillic/Greek/Arabic into Latin letters on the fly. Chinese passes through (needs a dictionary).</small>
+      <div class="row"><label class="lbl" for="romanize">Romanize</label><div class="grow end"><label class="switch"><input type="checkbox" id="romanize"><span class="track"></span></label></div></div>
+      <p class="hint">Japanese / Korean / Hindi / Bangla / Punjabi / Cyrillic / Greek / Arabic / Armenian / Georgian / Thai / Lao / Khmer → Latin. Chinese passes through.</p>
+      <div id="customRow">
+        <div class="row"><label class="lbl" for="customName">Provider name</label><div class="grow"><input type="text" id="customName" placeholder="e.g. MyProvider"></div></div>
+        <div class="row"><label class="lbl" for="customUrl">URL template</label><div class="grow"><input type="text" id="customUrl" placeholder="https://…/{title}?artist={artist}"></div></div>
+        <div class="row"><label class="lbl" for="customKey">API key</label><div class="grow"><input type="password" id="customKey" autocomplete="off" placeholder="optional"></div></div>
+        <div class="row"><label class="lbl" for="customPath">JSON path</label><div class="grow"><input type="text" id="customPath" placeholder="optional, e.g. /lrc/lyric"></div></div>
       </div>
-      <div id="customRow" class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-        <div class="flex flex-wrap items-center gap-3 py-3.5">
-          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customName">Provider name</label>
-          <div class="flex min-w-0 flex-1 items-center justify-end">
-            <input type="text" id="customName" placeholder="e.g. MyProvider"
-                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-3 py-3.5">
-          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customUrl">URL template</label>
-          <div class="flex min-w-0 flex-1 items-center justify-end">
-            <input type="text" id="customUrl" placeholder="https://…/{title}?artist={artist}"
-                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-          </div>
-          <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">{title} and {artist} are URL-quoted and substituted in. The response body is treated as LRC, unless a JSON path is given.</small>
-        </div>
-        <div class="flex flex-wrap items-center gap-3 py-3.5">
-          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customKey">API key</label>
-          <div class="flex min-w-0 flex-1 items-center justify-end">
-            <input type="password" id="customKey" autocomplete="off" placeholder="optional — {api_key} in URL or Bearer header"
-                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-3 py-3.5">
-          <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="customPath">JSON path</label>
-          <div class="flex min-w-0 flex-1 items-center justify-end">
-            <input type="text" id="customPath" placeholder="optional, e.g. /lrc/lyric"
-                   class="h-9 w-full max-w-[280px] rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60 dark:placeholder:text-zinc-500">
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="mb-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">timing</h2>
-    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="offset">Send offset (ms)</label>
-        <div class="flex flex-1 items-center justify-end gap-2">
-          <input type="number" id="offset" min="0" max="10000" class="h-9 w-24 rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60">
-        </div>
-        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">How early the status changes relative to each lyric line.</small>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoOffset">Autooffset</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="autoOffset" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Measure Discord API latency and adjust automatically (+100ms).</small>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="samples">Autooffset samples</label>
-        <div class="flex flex-1 items-center justify-end">
-          <input type="number" id="samples" min="1" max="20" class="h-9 w-24 rounded-md border border-zinc-200 bg-white px-3 font-mono text-[13px] outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-950/60">
-        </div>
-      </div>
-    </div>
-  </section>
+    <section class="card" aria-label="timing">
+      <h2>Timing</h2>
+      <div class="row"><label class="lbl" for="offset">Send offset (ms)</label><div class="grow end"><input type="number" id="offset" min="0" max="10000"></div></div>
+      <p class="hint">How early the status changes before each lyric line. 0 is allowed.</p>
+      <div class="row"><label class="lbl" for="autoOffset">Autooffset</label><div class="grow end"><label class="switch"><input type="checkbox" id="autoOffset"><span class="track"></span></label></div></div>
+      <p class="hint">Measure Discord latency and adjust automatically (+100ms).</p>
+      <div class="row"><label class="lbl" for="samples">Samples</label><div class="grow end"><input type="number" id="samples" min="1" max="20"></div></div>
+    </section>
 
-  <section class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-    <h2 class="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-400 dark:text-zinc-500">system</h2>
-    <div class="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="autoStart">Auto-start on login</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="autoStart" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Installs a platform autostart entry (Linux/macOS/Windows).</small>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 py-3.5">
-        <label class="w-36 shrink-0 text-[13px] font-medium text-zinc-600 dark:text-zinc-300" for="telemetry">Usage telemetry</label>
-        <div class="flex flex-1 items-center justify-end">
-          <label class="relative inline-flex cursor-pointer items-center">
-            <input type="checkbox" id="telemetry" class="peer sr-only">
-            <div class="h-5 w-9 rounded-full bg-zinc-200 transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-violet-600 peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40 dark:bg-zinc-700"></div>
-          </label>
-        </div>
-        <small class="w-full text-[11px] text-zinc-400 sm:pl-[156px] dark:text-zinc-500">Reports an anonymous install id, OS, architecture and version once per run. No IPs or personal data — see mewsic.yasakei.dev/usage.</small>
-      </div>
-      <small class="block py-3.5 text-[11px] text-zinc-400 dark:text-zinc-500">Updates are checked when you launch mewsic or run <code>mewsic update</code> in a terminal.</small>
-    </div>
-  </section>
-</div>
+    <section class="card" aria-label="system">
+      <h2>System</h2>
+      <div class="row"><label class="lbl" for="autoStart">Auto-start on login</label><div class="grow end"><label class="switch"><input type="checkbox" id="autoStart"><span class="track"></span></label></div></div>
+      <div class="row"><label class="lbl" for="telemetry">Usage telemetry</label><div class="grow end"><label class="switch"><input type="checkbox" id="telemetry"><span class="track"></span></label></div></div>
+      <p class="hint">Anonymous install id + OS + version, once per run. See mewsic.yasakei.dev/usage.</p>
+    </section>
+  </div>
+</main>
 
-<div class="saved-flag" id="savedFlag">SAVED</div>
+<div id="savedFlag" role="status" aria-live="polite">SAVED</div>
 
-<script>
-const $ = id => document.getElementById(id);
+<script>const $ = id => document.getElementById(id);
 let settings = null;
 let saveTimer = null;
-
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "auto") {
+    root.removeAttribute("data-theme");
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "dark" : "light";
+  } else {
+    root.dataset.theme = mode;
+  }
+}
+function initTheme() {
+  const saved = localStorage.getItem("mewsic-theme");
+  if (saved === "light" || saved === "dark") { applyTheme(saved); return; }
+  applyTheme("auto");
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (!localStorage.getItem("mewsic-theme")) applyTheme("auto");
+    });
+  }
+}
 function flashSaved() {
   const f = $("savedFlag");
+  f.textContent = "SAVED";
+  f.classList.remove("error");
   f.classList.add("show");
   clearTimeout(flashSaved._t);
   flashSaved._t = setTimeout(() => f.classList.remove("show"), 1400);
 }
-
+function flashSaveError() {
+  const f = $("savedFlag");
+  f.textContent = "SAVE FAILED";
+  f.classList.add("error");
+  f.classList.add("show");
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(() => f.classList.remove("show"), 2200);
+}
 function setCheck(id, value) { $(id).checked = !!value; }
 function setVal(id, value) { $(id).value = value ?? ""; }
-
 function bindSettings() {
   setCheck("timestamp", settings.view.timestamp);
   setCheck("label", settings.view.label);
@@ -472,32 +467,41 @@ function bindSettings() {
   $("source").value = settings.source || "spotify";
   setVal("lastfmKey", settings.lastfm ? settings.lastfm.api_key : "");
   setVal("lastfmUser", settings.lastfm ? settings.lastfm.username : "");
-
+  setVal("localPref", settings.local ? settings.local.preferred_player : "");
+  setCheck("verifyMusic", settings.local ? settings.local.verify_music === true : false);
   const lyr = settings.lyrics || {};
-  const provs = lyr.providers || ["lrclib", "netease", "qqmusic"];
+  const provs = lyr.providers || ["lrclib", "netease", "qqmusic", "youtube", "lastfm"];
+  const known = plistOrder();
+  const ordered = provs.filter(p => known.includes(p)).concat(known.filter(p => !provs.includes(p)));
+  applyProviderOrder(ordered);
   setCheck("provLrclib", provs.includes("lrclib"));
   setCheck("provNetease", provs.includes("netease"));
   setCheck("provQqmusic", provs.includes("qqmusic"));
+  setCheck("provYoutube", provs.includes("youtube"));
+  setCheck("provLastfm", provs.includes("lastfm"));
   setCheck("provCustom", provs.includes("custom"));
+  renderProviderRanks();
   setCheck("romanize", !!lyr.romanize);
   const custom = lyr.custom || {};
   setVal("customName", custom.name);
   setVal("customUrl", custom.url);
   setVal("customKey", custom.api_key || "");
   setVal("customPath", custom.json_path || "");
-
   updateSourceVisibility();
   updateAdvancedVisibility();
   updateLyricsVisibility();
   renderPreview();
 }
-
 function collectSettings() {
   const s = {
     source: $("source").value,
     lastfm: {
       api_key: $("lastfmKey").value.trim(),
       username: $("lastfmUser").value.trim()
+    },
+    local: {
+      preferred_player: $("localPref").value.trim(),
+      verify_music: $("verifyMusic").checked
     },
     view: {
       timestamp: $("timestamp").checked,
@@ -511,9 +515,9 @@ function collectSettings() {
       }
     },
     timing: {
-      send_time_offset: +$("offset").value || 500,
+      send_time_offset: clampOffset($("offset").value),
       enable_autooffset: $("autoOffset").checked,
-      autooffset: Math.max(1, +$("samples").value || 3)
+      autooffset: clampSamples($("samples").value)
     },
     update: { auto_start: $("autoStart").checked },
     usage: { enabled: $("telemetry").checked },
@@ -532,36 +536,115 @@ function collectSettings() {
   if (token) s.token = token;
   return s;
 }
-
-function collectLyricsProviders() {
-  const ids = [];
-  if ($("provLrclib").checked) ids.push("lrclib");
-  if ($("provNetease").checked) ids.push("netease");
-  if ($("provQqmusic").checked) ids.push("qqmusic");
-  if ($("provCustom").checked) ids.push("custom");
-  return ids;
+function plistOrder() {
+  return Array.from($("plist").children).map(el => el.dataset.id);
 }
-
+function renderProviderRanks() {
+  let rank = 0;
+  Array.from($("plist").children).forEach(el => {
+    const box = el.querySelector("input[type=checkbox]");
+    el.classList.toggle("off", !box.checked);
+    el.querySelector(".rank").textContent = box.checked ? ++rank : "";
+  });
+}
+function applyProviderOrder(order) {
+  const list = $("plist");
+  order.forEach(id => {
+    const el = list.querySelector('.pitem[data-id="' + CSS.escape(id) + '"]');
+    if (el) list.appendChild(el);
+  });
+  renderProviderRanks();
+}
+function collectLyricsProviders() {
+  return plistOrder().filter(id => {
+    const el = $("plist").querySelector('.pitem[data-id="' + CSS.escape(id) + '"] input');
+    return el && el.checked;
+  });
+}
+function moveProvider(id, delta) {
+  const list = $("plist");
+  const el = list.querySelector('.pitem[data-id="' + CSS.escape(id) + '"]');
+  if (!el) return;
+  const sibling = delta < 0 ? el.previousElementSibling : el.nextElementSibling;
+  if (!sibling) return;
+  if (delta < 0) list.insertBefore(el, sibling);
+  else list.insertBefore(sibling, el);
+  renderProviderRanks();
+  queueSave();
+}
+function initProviderReorder() {
+  const list = $("plist");
+  let dragged = null;
+  list.addEventListener("dragstart", e => {
+    const item = e.target.closest(".pitem");
+    if (!item) return;
+    dragged = item;
+    item.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", item.dataset.id); } catch (_) {}
+  });
+  list.addEventListener("dragover", e => {
+    if (!dragged) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const over = e.target.closest(".pitem");
+    if (!over || over === dragged) return;
+    Array.from(list.children).forEach(el => el.classList.remove("over"));
+    over.classList.add("over");
+    const rect = over.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    if (after) over.after(dragged);
+    else over.before(dragged);
+  });
+  list.addEventListener("dragend", () => {
+    if (dragged) dragged.classList.remove("dragging");
+    Array.from(list.children).forEach(el => el.classList.remove("over"));
+    dragged = null;
+    renderProviderRanks();
+    queueSave();
+  });
+  list.addEventListener("click", e => {
+    const btn = e.target.closest(".pbtn");
+    if (!btn) return;
+    const item = btn.closest(".pitem");
+    if (item) moveProvider(item.dataset.id, btn.classList.contains("up") ? -1 : 1);
+  });
+  list.addEventListener("change", e => {
+    if (!e.target.matches('input[type="checkbox"]')) return;
+    const item = e.target.closest(".pitem");
+    if (item && item.dataset.id === "custom") updateLyricsVisibility();
+    renderProviderRanks();
+    queueSave();
+  });
+  renderProviderRanks();
+}
 function updateSourceVisibility() {
   $("lastfmRow").style.display = $("source").value === "lastfm" ? "" : "none";
+  $("localRow").style.display = $("source").value === "local" ? "" : "none";
 }
-
 function updateAdvancedVisibility() {
   const on = $("advanced").checked;
-  $("advRow").style.display = on ? "flex" : "none";
-  $("advTemplateRow").style.display = on ? "flex" : "none";
+  $("advRow").style.display = on ? "" : "none";
+  $("advTemplateRow").style.display = on ? "" : "none";
 }
-
 function updateLyricsVisibility() {
   $("customRow").style.display = $("provCustom").checked ? "" : "none";
 }
-
+function clampOffset(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 500;
+  return Math.min(10000, Math.max(0, Math.floor(n)));
+}
+function clampSamples(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 3;
+  return Math.min(20, Math.max(1, Math.floor(n)));
+}
 function fmtSeconds(s) {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return m + ":" + String(sec).padStart(2, "0");
 }
-
 function renderPreview() {
   const v = collectSettings();
   let parts = [];
@@ -570,38 +653,56 @@ function renderPreview() {
   parts.push("La-la-la");
   let text = parts.join(" ");
   if (v.view.advanced.enabled) {
-    text = v.view.advanced.template
-      .replace(/\{lyrics\}/g, "La-la-la")
-      .replace(/\{song_name\}/g, "Example Song")
-      .replace(/\{song_author\}/g, "Example Artist")
-      .replace(/\{timestamp\}/g, "2:17")
-      .replace(/♪/g, "[music]");
+    const apply = (tpl, lyric, song, author, ts) => tpl
+      .split("{lyrics_upper_letters_only}").join(lyric.toUpperCase().replace(/[^A-Za-z ]/g, ""))
+      .split("{lyrics_lower_letters_only}").join(lyric.toLowerCase().replace(/[^A-Za-z ]/g, ""))
+      .split("{lyrics_letters_only}").join(lyric.replace(/[^A-Za-z ]/g, ""))
+      .split("{song_name_upper_cropped}").join(song.toUpperCase().split(" -")[0].split("(")[0].trim())
+      .split("{song_name_lower_cropped}").join(song.toLowerCase().split(" -")[0].split("(")[0].trim())
+      .split("{song_name_cropped}").join(song.split(" -")[0].split("(")[0].trim())
+      .split("{song_author_upper}").join(author.toUpperCase())
+      .split("{song_author_lower}").join(author.toLowerCase())
+      .split("{lyrics_upper}").join(lyric.toUpperCase())
+      .split("{lyrics_lower}").join(lyric.toLowerCase())
+      .split("{song_name_upper}").join(song.toUpperCase())
+      .split("{song_name_lower}").join(song.toLowerCase())
+      .split("{song_name}").join(song)
+      .split("{song_author}").join(author)
+      .split("{lyrics}").join(lyric)
+      .split("{timestamp}").join(ts)
+      .replace(/♪/g, "🎶");
+    text = apply(v.view.advanced.template || "{lyrics}", "La-la-la", "Example Song", "Example Artist", "2:17");
+  } else {
+    text = text.replace(/♪/g, "🎶");
   }
   const emoji = v.view.advanced.enabled ? v.view.advanced.emoji : v.view.emoji;
   $("preview").textContent = (emoji ? emoji + " " : "") + text.slice(0, 128);
 }
-
 function queueSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 400);
 }
-
 async function saveNow() {
   const body = collectSettings();
-  const res = await fetch("/api/settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (res.ok) { settings = body; flashSaved(); }
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { flashSaveError(); return; }
+    body.hasToken = $("token").value.trim() ? true : (settings ? !!settings.hasToken : false);
+    settings = body;
+    flashSaved();
+  } catch (e) {
+    flashSaveError();
+  }
 }
-
 async function loadSettings() {
   const res = await fetch("/api/settings");
   settings = await res.json();
   bindSettings();
 }
-
 async function pollState() {
   try {
     const res = await fetch("/api/state");
@@ -632,7 +733,6 @@ async function pollState() {
     $("liveText").textContent = "offline";
   }
 }
-
 async function checkToken() {
   const btn = $("checkToken");
   const token = $("token").value.trim();
@@ -646,24 +746,23 @@ async function checkToken() {
       body: JSON.stringify({ token })
     });
     const data = await res.json();
-    btn.className = data.ok ? "ok" : "err";
+    btn.className = "btn " + (data.ok ? "ok" : "err");
     btn.textContent = data.ok ? "VALID" : "INVALID";
-    setTimeout(() => { btn.className = ""; btn.textContent = "check"; btn.disabled = false; }, 2200);
+    setTimeout(() => { btn.className = "btn"; btn.textContent = "check"; btn.disabled = false; }, 2200);
   } catch (e) {
-    btn.className = "err"; btn.textContent = "error";
-    setTimeout(() => { btn.className = ""; btn.textContent = "check"; btn.disabled = false; }, 2200);
+    btn.className = "btn err"; btn.textContent = "error";
+    setTimeout(() => { btn.className = "btn"; btn.textContent = "check"; btn.disabled = false; }, 2200);
   }
 }
-
 ["timestamp","label","autoClear","advanced","autoOffset","autoStart","telemetry"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); });
 });
-["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser"].forEach(id => {
+["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser","localPref"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("input", () => { queueSave(); renderPreview(); });
 });
-["provLrclib","provNetease","provQqmusic","provCustom","romanize"].forEach(id => {
+["romanize","verifyMusic"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("change", () => { updateLyricsVisibility(); queueSave(); });
 });
@@ -674,10 +773,22 @@ async function checkToken() {
 $("source").addEventListener("change", () => { updateSourceVisibility(); queueSave(); });
 $("advTemplate").addEventListener("input", () => { queueSave(); renderPreview(); });
 $("checkToken").addEventListener("click", checkToken);
-
+$("showToken").addEventListener("click", () => {
+  const t = $("token");
+  const show = t.type === "password";
+  t.type = show ? "text" : "password";
+  $("showToken").textContent = show ? "hide" : "show";
+});
+$("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme;
+  const next = cur === "dark" ? "light" : "dark";
+  localStorage.setItem("mewsic-theme", next);
+  applyTheme(next);
+});
+initTheme();
+initProviderReorder();
 loadSettings();
 pollState();
-setInterval(pollState, 1000);
-</script>
+setInterval(pollState, 1000);</script>
 </body>
 </html>
