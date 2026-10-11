@@ -107,10 +107,6 @@ fn run(with_web: bool) {
 
     usage::report_in_background(&ctx);
 
-    if interactive && !with_web {
-        check_update_in_background(&ctx);
-    }
-
     if let Some((pid, file)) = running_instance() {
         if file == "background.pid" && !with_web && interactive {
             tui::run_remote_dashboard(&ctx, pid);
@@ -152,6 +148,7 @@ fn run(with_web: bool) {
     let engine = engine::Engine::new(ctx.clone());
     install_signal_handlers(&engine);
     engine.spawn_poller();
+    engine.spawn_auto_update();
 
     if interactive {
         if with_web {
@@ -296,6 +293,7 @@ fn background_child() {
 
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
+    engine.spawn_auto_update();
     run_headless(&ctx, &engine, true);
     engine.shutdown();
     crate::log::write("background engine stopped");
@@ -502,13 +500,6 @@ fn update_command(sub: Option<&str>) {
         _ => update::run_update(&ctx, true),
     };
     println!("{}", state.message);
-}
-
-fn check_update_in_background(ctx: &Arc<AppContext>) {
-    let ctx = ctx.clone();
-    thread::spawn(move || {
-        update::check_only(&ctx);
-    });
 }
 
 fn apply_update_helper(staged: Option<&String>) {

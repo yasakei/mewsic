@@ -257,6 +257,26 @@ impl Engine {
         });
     }
 
+    pub fn spawn_auto_update(&self) {
+        let ctx = self.ctx.clone();
+        let quit = self.quit.clone();
+        thread::spawn(move || {
+            let mut first = true;
+            loop {
+                let wait = if first {
+                    first = false;
+                    Duration::from_secs(15)
+                } else {
+                    Duration::from_secs(24 * 3600)
+                };
+                if sleep_until_quit(&quit, wait) {
+                    break;
+                }
+                crate::update::run_update(&ctx, false);
+            }
+        });
+    }
+
     pub fn shutdown(&self) {
         self.quit.store(true, Ordering::SeqCst);
         let (done_tx, done_rx) = mpsc::channel();
@@ -264,6 +284,20 @@ impl Engine {
             let _ = done_rx.recv_timeout(Duration::from_secs(5));
         }
     }
+}
+
+fn sleep_until_quit(quit: &Arc<AtomicBool>, wait: Duration) -> bool {
+    let step = Duration::from_secs(1);
+    let mut waited = Duration::ZERO;
+    while waited < wait {
+        if quit.load(Ordering::SeqCst) {
+            return true;
+        }
+        let chunk = step.min(wait - waited);
+        thread::sleep(chunk);
+        waited += chunk;
+    }
+    quit.load(Ordering::SeqCst)
 }
 
 #[derive(Default)]
