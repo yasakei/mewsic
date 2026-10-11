@@ -541,16 +541,25 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
     source_screen.push(Line::from(dim(
         "   Follows your scrobbles — WebScrobbler or the YT Music desktop app.",
     )));
+    source_screen.push(Line::from(vec![
+        cyan_bold("3"),
+        Span::raw("  Local player"),
+        yellow(" [experimental]"),
+    ]));
+    source_screen.push(Line::from(dim(
+        "   Reads the player on this machine — MPRIS on Linux, Spotify/Music on macOS, media controls on Windows.",
+    )));
     source_screen.blank();
 
     let default_source = match settings.source {
         crate::config::Source::Spotify => "spotify",
         crate::config::Source::Lastfm => "lastfm",
+        crate::config::Source::Local => "local",
     };
     let source_key = prompt_choice(
         &source_screen,
         "Choose your music source:",
-        &["spotify", "lastfm"],
+        &["spotify", "lastfm", "local"],
         Some(default_source),
     )?;
     if let Some(parsed) = crate::config::Source::parse(source_key) {
@@ -572,6 +581,24 @@ pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
             prompt_text(&lf, "Last.fm API key:", &settings.lastfm.api_key, false)?;
         settings.lastfm.username =
             prompt_text(&lf, "Last.fm username:", &settings.lastfm.username, false)?;
+    }
+    if settings.source == crate::config::Source::Local {
+        let mut lp = Screen::new("Source · Step 1/4");
+        lp.push(Line::from(vec![
+            dim("Step 1"),
+            Span::raw("  "),
+            bold("Preferred player"),
+        ]));
+        lp.push(Line::from(dim(
+            "Matches the MPRIS bus name or app name, e.g. spotify. Empty means first playing player wins.",
+        )));
+        lp.blank();
+        settings.local.preferred_player = prompt_text(
+            &lp,
+            "Preferred player (empty = none):",
+            &settings.local.preferred_player,
+            false,
+        )?;
     }
 
     let mut account = Screen::new("Account · Step 2/4");
@@ -1019,15 +1046,24 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                 scr.push(Line::from(dim(
                     "   Follows your scrobbles — WebScrobbler or the YT Music desktop app.",
                 )));
+                scr.push(Line::from(vec![
+                    cyan_bold("3"),
+                    Span::raw("  Local player"),
+                    yellow(" [experimental]"),
+                ]));
+                scr.push(Line::from(dim(
+                    "   Reads the player on this machine — MPRIS on Linux, Spotify/Music on macOS, media controls on Windows.",
+                )));
                 scr.blank();
                 let default_source = match settings.source {
                     crate::config::Source::Spotify => "spotify",
                     crate::config::Source::Lastfm => "lastfm",
+                    crate::config::Source::Local => "local",
                 };
                 let source_key = prompt_choice(
                     &scr,
                     "Choose your music source:",
-                    &["spotify", "lastfm"],
+                    &["spotify", "lastfm", "local"],
                     Some(default_source),
                 )?;
                 if let Some(parsed) = crate::config::Source::parse(source_key) {
@@ -1038,6 +1074,14 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                         prompt_text(&scr, "Last.fm API key", &settings.lastfm.api_key, false)?;
                     settings.lastfm.username =
                         prompt_text(&scr, "Last.fm username", &settings.lastfm.username, false)?;
+                }
+                if settings.source == crate::config::Source::Local {
+                    settings.local.preferred_player = prompt_text(
+                        &scr,
+                        "Preferred player (empty = none)",
+                        &settings.local.preferred_player,
+                        false,
+                    )?;
                 }
             }
             "3" | "view" => {
@@ -1163,7 +1207,7 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                 }
                 scr.blank();
                 scr.push(Line::from(dim(
-                    "Japanese/Korean/Hindi/Bangla/Cyrillic/Greek/Arabic become Latin.",
+                    "Japanese/Korean/Hindi/Bangla/Punjabi/Cyrillic/Greek/Arabic/Armenian/Georgian/Thai/Lao/Khmer become Latin.",
                 )));
                 settings.lyrics.romanize =
                     prompt_confirm(&scr, "Romanize lyrics?", settings.lyrics.romanize)?;
@@ -1180,11 +1224,8 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                     "personal data. See mewsic.yasakei.dev/usage for the stats.",
                 )));
                 scr.blank();
-                settings.usage.enabled = prompt_confirm(
-                    &scr,
-                    "Send anonymous usage stats?",
-                    settings.usage.enabled,
-                )?;
+                settings.usage.enabled =
+                    prompt_confirm(&scr, "Send anonymous usage stats?", settings.usage.enabled)?;
             }
             _ => {
                 let mut scr = Screen::new("Settings editor");

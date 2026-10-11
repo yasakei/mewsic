@@ -30,6 +30,7 @@ pub enum Source {
     #[default]
     Spotify,
     Lastfm,
+    Local,
 }
 
 impl Source {
@@ -37,6 +38,7 @@ impl Source {
         match self {
             Source::Spotify => "Spotify",
             Source::Lastfm => "Last.fm",
+            Source::Local => "Local player [experimental]",
         }
     }
 
@@ -44,6 +46,9 @@ impl Source {
         match input.trim().to_ascii_lowercase().as_str() {
             "spotify" | "sp" | "discord" | "dc" => Some(Source::Spotify),
             "lastfm" | "last.fm" | "lf" | "ytmusic" | "ytm" => Some(Source::Lastfm),
+            "local" | "mpris" | "system" | "nowplaying" | "now playing" | "smtc" | "os" => {
+                Some(Source::Local)
+            }
             _ => None,
         }
     }
@@ -56,6 +61,7 @@ pub struct Settings {
     pub token: String,
     pub source: Source,
     pub lastfm: LastFmSettings,
+    pub local: LocalSettings,
     pub view: ViewSettings,
     pub timing: TimingSettings,
     pub update: UpdateSettings,
@@ -68,6 +74,13 @@ pub struct Settings {
 pub struct LastFmSettings {
     pub api_key: String,
     pub username: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LocalSettings {
+    pub preferred_player: String,
+    pub verify_music: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +98,8 @@ impl Default for LyricsSettings {
                 "lrclib".to_string(),
                 "netease".to_string(),
                 "qqmusic".to_string(),
+                "youtube".to_string(),
+                "lastfm".to_string(),
             ],
             romanize: false,
             custom: None,
@@ -93,13 +108,16 @@ impl Default for LyricsSettings {
 }
 
 impl LyricsSettings {
-    pub const BUILTIN: &'static [&'static str] = &["lrclib", "netease", "qqmusic"];
+    pub const BUILTIN: &'static [&'static str] =
+        &["lrclib", "netease", "qqmusic", "youtube", "lastfm"];
 
     pub fn provider_label(id: &str) -> &'static str {
         match id {
             "lrclib" => "LrcLib",
             "netease" => "NetEase Music",
             "qqmusic" => "QQ Music",
+            "youtube" => "YouTube captions [experimental]",
+            "lastfm" => "Last.fm transcript [experimental]",
             "custom" => "Custom",
             _ => "Unknown",
         }
@@ -182,9 +200,6 @@ pub struct UpdateSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UsageSettings {
-    /// Send anonymous usage statistics (OS, architecture, version) so the
-    /// project can publish "how many people use mewsic on which OS" graphs.
-    /// No IPs, usernames, tokens, or song data are ever included.
     pub enabled: bool,
 }
 
@@ -254,10 +269,6 @@ fn default_with_migration(dir: &Path) -> Settings {
     settings
 }
 
-/// A parse failure means the user (or a bad edit) left `settings.toml`
-/// unreadable. Copy it aside before loading defaults, otherwise the next
-/// `save()` silently overwrites the broken file and the original config is
-/// lost forever.
 fn back_up_broken_settings(path: &Path, error: &toml::de::Error) {
     let backup = path.with_extension("toml.bak");
     match std::fs::copy(path, &backup) {
@@ -372,6 +383,9 @@ mod tests {
         assert_eq!(Source::parse("last.fm"), Some(Source::Lastfm));
         assert_eq!(Source::parse("ytmusic"), Some(Source::Lastfm));
         assert_eq!(Source::parse("ytm"), Some(Source::Lastfm));
+        assert_eq!(Source::parse("local"), Some(Source::Local));
+        assert_eq!(Source::parse("mpris"), Some(Source::Local));
+        assert_eq!(Source::parse("now playing"), Some(Source::Local));
         assert_eq!(Source::parse("slack"), None);
     }
 
@@ -391,9 +405,33 @@ mod tests {
     }
 
     #[test]
+    fn experimental_items_are_flagged() {
+        for id in ["youtube", "lastfm"] {
+            let label = LyricsSettings::provider_label(id);
+            assert!(
+                label.contains("[experimental]"),
+                "{id} must be flagged experimental: {label}"
+            );
+        }
+        assert!(Source::Local.label().contains("[experimental]"));
+        for id in ["lrclib", "netease", "qqmusic", "custom"] {
+            assert!(
+                !LyricsSettings::provider_label(id).contains("experimental"),
+                "{id} should not be flagged"
+            );
+        }
+        for src in [Source::Spotify, Source::Lastfm] {
+            assert!(!src.label().contains("experimental"));
+        }
+    }
+
+    #[test]
     fn lyrics_defaults_to_all_builtins() {
         let s = Settings::default();
-        assert_eq!(s.lyrics.providers, vec!["lrclib", "netease", "qqmusic"]);
+        assert_eq!(
+            s.lyrics.providers,
+            vec!["lrclib", "netease", "qqmusic", "youtube", "lastfm"]
+        );
         assert!(s.lyrics.custom.is_none());
     }
 
@@ -463,16 +501,10 @@ mod tests {
         let s = Settings::load(&dir);
         assert_eq!(s.source, Source::Spotify);
 
-        // The broken file must survive for recovery, untouched.
         let backup = fs::read_to_string(dir.join("settings.toml.bak")).unwrap();
         assert_eq!(backup, broken);
 
-        // A subsequent valid file loads normally and leaves backups alone.
-        fs::write(
-            dir.join("settings.toml"),
-            "[view]\ntimestamp = false\n",
-        )
-        .unwrap();
+        fs::write(dir.join("settings.toml"), "[view]\ntimestamp = false\n").unwrap();
         assert!(!Settings::load(&dir).view.timestamp);
 
         let _ = fs::remove_dir_all(&dir);

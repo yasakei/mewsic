@@ -6,12 +6,8 @@ use sha2::{Digest, Sha256};
 
 use crate::state::AppContext;
 
-/// Anonymous usage reporting. The payload is just an install id, the OS,
-/// architecture and app version — no IPs, usernames, tokens or song data.
 pub const USAGE_ENDPOINT: &str = "https://mewsic.yasakei.dev/v1/usage";
 
-/// Telemetry is on by default. Opt out with `usage.enabled = false` in
-/// settings.toml or the `MEWSIC_NO_TELEMETRY=1` environment variable.
 pub fn report_in_background(ctx: &Arc<AppContext>) {
     if !enabled(ctx) {
         return;
@@ -25,9 +21,14 @@ pub fn report_in_background(ctx: &Arc<AppContext>) {
             "version": env!("CARGO_PKG_VERSION"),
         });
         let started = std::time::Instant::now();
-        let result = crate::net::usage_agent().post(USAGE_ENDPOINT).send_json(&payload);
+        let result = crate::net::usage_agent()
+            .post(USAGE_ENDPOINT)
+            .send_json(&payload);
         if let Err(e) = result {
-            crate::log::write(&format!("telemetry report failed ({:.0} ms): {e}", started.elapsed().as_millis()));
+            crate::log::write(&format!(
+                "telemetry report failed ({:.0} ms): {e}",
+                started.elapsed().as_millis()
+            ));
         }
     });
 }
@@ -39,8 +40,6 @@ fn enabled(ctx: &AppContext) -> bool {
     ctx.settings.read().unwrap().usage.enabled
 }
 
-/// Persistent, unguessable install id. It is random per installation so the
-/// API can count unique users without ever learning who they are.
 fn install_id(dir: &Path) -> String {
     let path = dir.join("install_id");
     if let Ok(existing) = std::fs::read_to_string(&path) {
@@ -54,8 +53,6 @@ fn install_id(dir: &Path) -> String {
     id
 }
 
-/// 16 bytes of entropy: /dev/urandom where available, else a hash of the
-/// clock, pid and memory address. Good enough to be unique per machine.
 fn rand_bytes() -> [u8; 16] {
     #[cfg(unix)]
     {

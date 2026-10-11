@@ -19,6 +19,7 @@ pub struct Playback {
     pub old_song_id: String,
     pub song_duration: u64,
     pub song_progress: u64,
+    pub youtube_id: Option<String>,
     pub lyrics: Option<Vec<LyricsLine>>,
     pub current_line: Option<LyricsLine>,
     pub has_lyrics: bool,
@@ -38,12 +39,9 @@ pub struct Tracker {
     pub latencies: Vec<u64>,
     pub last_latency: u64,
     pub lastfm_lag: Option<u64>,
-    /// When the current lyric line was last pushed to Discord, used to refresh
-    /// the status before its `expires_at` lapses during long gaps between lines.
     pub last_send: Option<Instant>,
-    /// Whether the player was playing on the previous tick, used to detect the
-    /// playing -> paused edge so the status reverts when the song is paused.
     pub prev_playing: bool,
+    pub rejected_song: String,
 }
 
 impl Tracker {

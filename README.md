@@ -18,15 +18,18 @@ real time. One tiny native binary, written in safe Rust.
 
 ## Features
 
-- **Two playback sources** — Spotify via your Discord connection (no local
-  player needed), or Last.fm scrobbles (covers YouTube Music via
-  [WebScrobbler](https://webscrobbler.com/), and any scrobbling player).
-- **Synced lyrics** from LrcLib, NetEase Music and QQ Music — pick any
-  combination, or plug in a custom provider (URL template + optional JSON
-  path). Cached on disk, so repeat plays are instant.
+- **Three playback sources** — Spotify via your Discord connection (no local
+  player needed), Last.fm scrobbles (covers YouTube Music via
+  [WebScrobbler](https://webscrobbler.com/), and any scrobbling player),
+  or the local player on your machine (MPRIS on Linux, Spotify/Music on
+  macOS, media controls on Windows — exact position, no scrobble lag).
+- **Synced lyrics** from LrcLib, NetEase Music, QQ Music, Last.fm transcripts
+  and YouTube captions (no key needed) — pick any combination, or plug in a
+  custom provider (URL template + optional JSON path). Cached on disk, so
+  repeat plays are instant.
 - **Romanization** — Japanese, Korean, Hindi, Bangla, Punjabi, Cyrillic,
-  Greek and Arabic lyrics transliterated locally into Latin letters; Chinese
-  passes through. Fully data-driven and user-overridable (see
+  Greek, Arabic, Armenian, Georgian, Thai, Lao and Khmer lyrics transliterated
+  locally into Latin letters; Chinese passes through. Fully data-driven and user-overridable (see
   [Romanization](#romanization)).
 - **Ahead-of-time line sync** — fixed offset, or an auto-offset that learns
   your Discord API latency.

@@ -6,6 +6,7 @@ mod connector;
 mod credential;
 mod engine;
 mod lastfm;
+mod local;
 mod log;
 mod lyrics;
 mod net;
@@ -16,6 +17,7 @@ mod tui;
 mod update;
 mod usage;
 mod util;
+mod verify;
 mod web;
 
 use std::path::PathBuf;
@@ -299,10 +301,6 @@ fn background_child() {
     crate::log::write("background engine stopped");
 }
 
-/// Route termination signals (SIGTERM, SIGINT) into the quit flag so the run
-/// loops break and `engine.shutdown()` can restore the user's status before
-/// the process exits. Without this, `mewsic stop` / `kill background` (which
-/// send SIGTERM) would terminate the process without restoring the status.
 fn install_signal_handlers(engine: &Arc<engine::Engine>) {
     let quit = engine.quit().clone();
     let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, quit.clone());
@@ -506,9 +504,6 @@ fn update_command(sub: Option<&str>) {
     println!("{}", state.message);
 }
 
-/// Check for a newer release without blocking startup. The dashboard reads
-/// `ctx.shared.update` to render an "Update available" banner, so the network
-/// call happens on a background thread and the TUI appears immediately.
 fn check_update_in_background(ctx: &Arc<AppContext>) {
     let ctx = ctx.clone();
     thread::spawn(move || {
