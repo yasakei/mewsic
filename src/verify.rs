@@ -78,14 +78,14 @@ fn reachable() -> bool {
 }
 
 pub fn looks_like_music(ctx: &AppContext, song: &str, artist: &str, duration_ms: u64) -> bool {
-    let song = song.trim();
+    let (song, artist) = crate::lyrics::clean_song_artist(song, artist);
     if song.is_empty() {
         return false;
     }
     if !reachable() {
         return true;
     }
-    let k = key(song, artist);
+    let k = key(&song, &artist);
     let now = now_hours();
 
     {
@@ -110,7 +110,7 @@ pub fn looks_like_music(ctx: &AppContext, song: &str, artist: &str, duration_ms:
         }
     }
 
-    let ok = crate::lyrics::has_synced_lyrics(song, artist, duration_ms);
+    let ok = crate::lyrics::has_any_lyrics(&song, &artist, duration_ms);
     let entry = Entry { ok, at: now };
     memory_cache()
         .lock()

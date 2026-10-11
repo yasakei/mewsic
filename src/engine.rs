@@ -448,8 +448,9 @@ fn apply_state(ctx: &AppContext, state: &connector::PlayerState, progress_ms: Op
     if song_changed {
         playback.old_song_id = playback.song_id.clone();
         playback.song_id = state.track_id.clone();
-        playback.song_name = connector::cleanup_title(&state.name);
-        playback.song_author = state.artist.clone();
+        let (song, artist) = crate::lyrics::clean_song_artist(&state.name, &state.artist);
+        playback.song_name = song;
+        playback.song_author = artist;
         playback.youtube_id = state.youtube_id.clone();
         playback.lyrics = None;
         playback.current_line = None;
@@ -751,14 +752,14 @@ mod tests {
         apply_state(&ctx, &state, Some(0));
         fix_youtube_metadata(&ctx, &mut fetcher, &state);
         let pb = ctx.shared.playback.lock().unwrap();
-        assert_eq!(pb.song_author, "HYBE LABELS");
+        assert_eq!(pb.song_name, "Magnetic");
+        assert_eq!(pb.song_author, "ILLIT");
     }
 
     #[test]
-    fn cleanup_title_keeps_quoted_song_but_drops_native_name() {
+    fn long_youtube_title_cleans_to_song_and_artist() {
         let raw = "ILLIT (아일릿) ‘Magnetic’ Official MV";
-        assert_eq!(connector::cleanup_title(raw), "ILLIT");
-        let (song, artist) = crate::lyrics::split_youtube_title(raw).unwrap();
+        let (song, artist) = crate::lyrics::clean_song_artist(raw, "HYBE LABELS");
         assert_eq!(song, "Magnetic");
         assert_eq!(artist, "ILLIT");
     }

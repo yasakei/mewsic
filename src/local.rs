@@ -102,13 +102,7 @@ mod mpris {
         let duration_ms = meta.length_in_microseconds().unwrap_or(0) / 1000;
         let progress_ms = player.get_position_in_microseconds().unwrap_or(0) / 1000;
         let youtube_id = meta.url().and_then(crate::lyrics::youtube_id_from_url);
-        let (name, artist) = if youtube_id.is_some() {
-            crate::lyrics::split_youtube_title(&title)
-                .filter(|(_, artist)| !artist.is_empty())
-                .unwrap_or_else(|| (crate::connector::cleanup_title(&title), artist.clone()))
-        } else {
-            (crate::connector::cleanup_title(&title), artist)
-        };
+        let (name, artist) = crate::lyrics::clean_song_artist(&title, &artist);
         let track_id = match &youtube_id {
             Some(id) => format!("local:yt:{id}"),
             None => format!("local:{title}\0{artist}"),
@@ -229,12 +223,13 @@ mod macos {
             (raw_duration * 1000.0) as u64
         };
         let id = parts[5].trim();
+        let (name, artist) = crate::lyrics::clean_song_artist(title, &artist);
         Some(PlayerState {
             is_playing,
             progress_ms,
             duration_ms,
             track_id: format!("local:{id}"),
-            name: crate::connector::cleanup_title(title),
+            name,
             artist,
             youtube_id: None,
         })
@@ -330,13 +325,14 @@ try {
         if title.is_empty() {
             return None;
         }
+        let (name, artist) = crate::lyrics::clean_song_artist(title, parts[2].trim());
         Some(PlayerState {
             is_playing: parts[0].trim() == "Playing",
             progress_ms: parts[3].trim().parse::<f64>().unwrap_or(0.0) as u64,
             duration_ms: parts[4].trim().parse::<f64>().unwrap_or(0.0) as u64,
             track_id: format!("local:{title}\0{}", parts[2].trim()),
-            name: crate::connector::cleanup_title(title),
-            artist: parts[2].trim().to_string(),
+            name,
+            artist,
             youtube_id: None,
         })
     }

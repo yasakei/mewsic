@@ -538,29 +538,327 @@ pub fn split_youtube_title(raw: &str) -> Option<(String, String)> {
     None
 }
 
-pub fn has_synced_lyrics(song: &str, artist: &str, duration_ms: u64) -> bool {
-    let song = song.trim();
+pub fn clean_song_artist(title: &str, artist: &str) -> (String, String) {
+    let title = title.trim();
+    let artist = artist.trim();
+    if let Some((song, split_artist)) = split_youtube_title(title) {
+        if !song.is_empty() {
+            let resolved = if split_artist.trim().is_empty() {
+                normalize_artist(artist)
+            } else {
+                split_artist
+            };
+            return (song, resolved);
+        }
+    }
+    (normalize_title(title), normalize_artist(artist))
+}
+
+pub fn has_any_lyrics(song: &str, artist: &str, duration_ms: u64) -> bool {
+    let (song, artist) = clean_song_artist(song, artist);
     if song.is_empty() {
         return false;
     }
-    for (t, a) in search_queries(song, artist).iter().take(2) {
-        let found = LrcLibSource
-            .fetch_timed(t, a, duration_ms)
-            .map(|l| !l.is_empty())
-            .unwrap_or(false)
-            || NetEaseSource
-                .fetch_timed(t, a, duration_ms)
-                .map(|l| !l.is_empty())
-                .unwrap_or(false)
-            || QqMusicSource
-                .fetch_timed(t, a, duration_ms)
-                .map(|l| !l.is_empty())
-                .unwrap_or(false);
-        if found {
+    for (t, a) in search_queries(&song, &artist) {
+        if t.trim().is_empty() {
+            continue;
+        }
+        if lrclib_track_exists(&t, &a, duration_ms) {
+            return true;
+        }
+        if netease_track_exists(&t, &a, duration_ms) {
+            return true;
+        }
+        if qq_track_exists(&t, &a) {
             return true;
         }
     }
     false
+}
+
+fn lrclib_has_words(value: &serde_json::Value) -> bool {
+    if value
+        .get("instrumental")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    let synced = value
+        .get("syncedLyrics")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !synced.trim().is_empty() {
+        return true;
+    }
+    let plain = value
+        .get("plainLyrics")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    !plain.trim().is_empty()
+}
+
+fn lrclib_track_exists(title: &str, artist: &str, duration_ms: u64) -> bool {
+    let mut urls = Vec::new();
+    if duration_ms > 0 {
+        urls.push(format!(
+            "https://lrclib.net/api/get?track_name={}&artist_name={}&duration={}",
+            urlencode(title),
+            urlencode(artist),
+            duration_ms / 1000
+        ));
+    }
+    urls.push(format!(
+        "https://lrclib.net/api/get?track_name={}&artist_name={}",
+        urlencode(title),
+        urlencode(artist)
+    ));
+    for url in urls {
+        if let Ok(resp) = net::lyrics_agent().get(&url).call() {
+            if resp.status() != 200 {
+                continue;
+            }
+            if let Ok(json) = resp.into_json::<serde_json::Value>() {
+                if lrclib_has_words(&json) {
+                    return true;
+                }
+            }
+        }
+    }
+    let url = format!(
+        "https://lrclib.net/api/search?track_name={}&artist_name={}",
+        urlencode(title),
+        urlencode(artist)
+    );
+    let resp = match net::lyrics_agent().get(&url).call() {
+        Ok(r) if r.status() == 200 => r,
+        _ => return false,
+    };
+    let json: serde_json::Value = match resp.into_json() {
+        Ok(j) => j,
+        Err(_) => return false,
+    };
+    let tracks = match json.as_array() {
+        Some(t) if !t.is_empty() => t,
+        _ => return false,
+    };
+    let hits: Vec<&serde_json::Value> = tracks
+        .iter()
+        .filter(|t| lrclib_has_words(t) && lrclib_name_matches(t, title, artist))
+        .collect();
+    if hits.is_empty() {
+        return false;
+    }
+    if duration_ms == 0 {
+        return true;
+    }
+    let durations: Vec<u64> = hits
+        .iter()
+        .map(|t| {
+            t.get("duration")
+                .and_then(|v| v.as_f64())
+                .map(|d| (d * 1000.0) as u64)
+                .unwrap_or(0)
+        })
+        .collect();
+    if durations.iter().all(|d| *d == 0) {
+        return true;
+    }
+    pick_duration_index(&durations, duration_ms, 30_000).is_some()
+}
+
+fn lrclib_name_matches(track: &serde_json::Value, title: &str, artist: &str) -> bool {
+    let name = track
+        .get("trackName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !songs_match(title, name) {
+        return false;
+    }
+    if artist.trim().is_empty() {
+        return true;
+    }
+    let track_artist = track
+        .get("artistName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if track_artist.trim().is_empty() {
+        return true;
+    }
+    songs_match(artist, track_artist)
+}
+
+fn netease_name_matches(song: &serde_json::Value, title: &str, artist: &str) -> bool {
+    let name = song.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    if !songs_match(title, name) {
+        return false;
+    }
+    if artist.trim().is_empty() {
+        return true;
+    }
+    let artists = match song.get("artists").and_then(|v| v.as_array()) {
+        Some(a) => a,
+        None => return true,
+    };
+    if artists.is_empty() {
+        return true;
+    }
+    artists.iter().any(|a| {
+        let n = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        songs_match(artist, n)
+    })
+}
+
+fn netease_lyric_exists(song_id: i64) -> bool {
+    let url = format!("https://music.163.com/api/song/lyric?tv=-1&kv=-1&lv=-1&os=pc&id={song_id}");
+    let resp = match net::lyrics_agent()
+        .post(&url)
+        .set("Referer", "https://music.163.com")
+        .set("Cookie", "appver=2.0.2")
+        .set("X-Real-IP", "202.96.0.0")
+        .call()
+    {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let json: serde_json::Value = match resp.into_json() {
+        Ok(j) => j,
+        Err(_) => return false,
+    };
+    for path in ["/lrc/lyric", "/klyric/lyric", "/tlyric/lyric"] {
+        let text = json.pointer(path).and_then(|v| v.as_str()).unwrap_or("");
+        if !text.trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+fn netease_track_exists(title: &str, artist: &str, duration_ms: u64) -> bool {
+    let url = format!(
+        "https://music.163.com/api/search/get?s={}&type=1&offset=0&sub=false&limit=10",
+        urlencode(&format!("{title}-{artist}"))
+    );
+    let resp = match net::lyrics_agent()
+        .post(&url)
+        .set("Referer", "https://music.163.com")
+        .set("Cookie", "appver=2.0.2")
+        .set("X-Real-IP", "202.96.0.0")
+        .call()
+    {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let json: serde_json::Value = match resp.into_json() {
+        Ok(j) => j,
+        Err(_) => return false,
+    };
+    let songs = match json.pointer("/result/songs").and_then(|v| v.as_array()) {
+        Some(s) if !s.is_empty() => s,
+        _ => return false,
+    };
+    let matching: Vec<usize> = songs
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| netease_name_matches(s, title, artist))
+        .map(|(i, _)| i)
+        .collect();
+    if matching.is_empty() {
+        return false;
+    }
+    let mut order = matching;
+    if duration_ms > 0 {
+        let durations: Vec<u64> = order
+            .iter()
+            .map(|&i| {
+                songs[i]
+                    .get("duration")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+            })
+            .collect();
+        if durations.iter().any(|d| *d > 0) {
+            match pick_duration_index(&durations, duration_ms, 30_000) {
+                Some(w) => order = vec![order[w]],
+                None => return false,
+            }
+        }
+    }
+    for i in order {
+        let id = match songs[i].get("id").and_then(|v| v.as_i64()) {
+            Some(id) => id,
+            None => continue,
+        };
+        if netease_lyric_exists(id) {
+            return true;
+        }
+    }
+    false
+}
+
+fn qq_track_exists(title: &str, artist: &str) -> bool {
+    let mid = match qq_song_mid(title, artist) {
+        Some(m) => m,
+        None => return false,
+    };
+    let url = format!(
+        "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?g_tk=5381&format=json&inCharset=utf-8&outCharset=utf-8&songmid={mid}"
+    );
+    let resp = match net::lyrics_agent()
+        .get(&url)
+        .set("Referer", "http://y.qq.com/portal/player.html")
+        .call()
+    {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let json: serde_json::Value = match resp.into_json() {
+        Ok(j) => j,
+        Err(_) => return false,
+    };
+    let b64 = json.get("lyric").and_then(|v| v.as_str()).unwrap_or("");
+    if b64.trim().is_empty() {
+        return false;
+    }
+    match base64::engine::general_purpose::STANDARD.decode(b64) {
+        Ok(bytes) => !String::from_utf8_lossy(&bytes).trim().is_empty(),
+        Err(_) => false,
+    }
+}
+
+fn qq_song_mid(title: &str, artist: &str) -> Option<String> {
+    let url = format!(
+        "https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?inCharset=utf-8&outCharset=utf-8&format=json&key={}",
+        urlencode(&format!("{title}-{artist}"))
+    );
+    let resp = net::lyrics_agent()
+        .get(&url)
+        .set("Referer", "http://y.qq.com/portal/player.html")
+        .call()
+        .ok()?;
+    if resp.status() != 200 {
+        return None;
+    }
+    let json: serde_json::Value = resp.into_json().ok()?;
+    let items = json
+        .pointer("/data/song/itemlist")
+        .and_then(|v| v.as_array())?;
+    for item in items {
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        if !songs_match(title, name) {
+            continue;
+        }
+        if !artist.trim().is_empty() {
+            let singer = item.get("singer").and_then(|v| v.as_str()).unwrap_or("");
+            if !singer.trim().is_empty() && !songs_match(artist, singer) {
+                continue;
+            }
+        }
+        if let Some(mid) = item.get("mid").and_then(|v| v.as_str()) {
+            return Some(mid.to_string());
+        }
+    }
+    None
 }
 
 pub fn normalize_match(s: &str) -> String {

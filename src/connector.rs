@@ -229,14 +229,6 @@ pub fn validate_token(token: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub fn cleanup_title(title: &str) -> String {
-    let t = title.trim();
-    match t.find(" (") {
-        Some(idx) => t[..idx].trim().to_string(),
-        None => t.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::parse_emoji;
