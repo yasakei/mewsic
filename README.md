@@ -87,11 +87,82 @@ fallback file on systems without a keyring.
 ### Lyrics relay (experimental)
 
 The panel's **Experiments** card can expose your live song + lyric line as a
-push-only WebSocket at `/song/ws` so other pages can follow along. Enable it
-with "Lyrics relay (WebSocket)", optionally set an access token and a listener
-cap (default 8), and flip on the cloudflared quick tunnel to publish a
-temporary `*.trycloudflare.com` link. Only that one route leaves your machine
-— the token, settings and saves stay behind the local-only panel check.
+push-only WebSocket at `/song/ws` so other pages can follow along. Only that
+one route is ever reachable from outside — the token, settings and saves stay
+behind the local-only panel check.
+
+**WS payload** (one JSON message per state/line change, ~1/s while playing):
+
+```json
+{
+  "song": "Love Me Not", "artist": "Ravyn Lenae",
+  "playing": true, "progress": 175000, "duration": 213000,
+  "line": "All this time I'm thinking, I'm strong enough to sink it",
+  "hasLyrics": true, "source": "Spotify", "ts": 1760689200000
+}
+```
+
+Quick consumer from any page:
+
+```js
+const ws = new WebSocket("wss://your.host/song/ws");
+ws.onmessage = e => { const s = JSON.parse(e.data); renderNowPlaying(s); };
+```
+
+#### Options (panel: Experiments card, or `[relay]` in settings.toml)
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `false` | Serve the WS feed at `/song/ws` (through a tunnel) |
+| `max_clients` | `8` | Concurrent listener cap; extra connections get `429` |
+| `token` | *(empty)* | When set, the handshake requires `?token=` (`401` otherwise) |
+| `tunnel` | `false` | Start cloudflared automatically (a quick tunnel if `tunnel_name` is empty) |
+| `tunnel_name` | *(empty)* | Name of your **own** cloudflared tunnel → custom domain mode |
+| `tunnel_host` | *(empty)* | Public hostname routed to the tunnel; builds the display link |
+
+Also enforced regardless of config: inbound messages are capped at 8 per
+10s per client (over the cap = disconnected) and frames larger than 4 KiB
+are rejected (close code 1009).
+
+TOML example:
+
+```toml
+[relay]
+enabled = true
+max_clients = 8
+token = "pick-a-long-secret"
+tunnel = true
+
+# custom domain (optional — see one-time setup below)
+tunnel_name = "mewsic-relay"
+tunnel_host = "lyrics.yasakei.dev"
+```
+
+#### Quick tunnel (no setup)
+
+Leave `tunnel_name` empty, turn the tunnel toggle on → `cloudflared tunnel
+--url http://127.0.0.1:8999` runs and Mewsic parses the temporary
+`*.trycloudflare.com` link from its output and shows it in the panel. The
+link rotates every restart; reconnect consumers to whatever is current.
+
+#### Custom domain (your own named tunnel)
+
+One-time, in a terminal:
+
+```sh
+cloudflared tunnel login                          # browser auth
+cloudflared tunnel create mewsic-relay            # tunnel + credentials json
+cloudflared tunnel route dns mewsic-relay lyrics.yasakei.dev
+```
+
+Then set `tunnel_name = "mewsic-relay"` and `tunnel_host =
+"lyrics.yasakei.dev"` in the panel (or `[relay]` in settings.toml). Mewsic
+runs `cloudflared tunnel run mewsic-relay`, restarts it if it dies, stops it
+when mewsic quits, and displays `wss://lyrics.yasakei.dev/song/ws` (+ your
+`?token=`) as the relay link. Works with the quick-tunnel toggle off.
+
+The relay link and listener count update live in the Experiments card at
+`GET /api/relay` — local only, like the rest of the panel.
 
 ### Telemetry
 
