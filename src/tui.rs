@@ -1015,12 +1015,16 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
             cyan_bold("8"),
             Span::raw("  Privacy (telemetry)"),
         ]));
+        menu.push(Line::from(vec![
+            cyan_bold("9"),
+            Span::raw("  Experiments (web panel extras)"),
+        ]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
         )));
 
-        let choice = prompt_text(&menu, "Choose 1-8 or Enter to save/exit", "", false)?;
+        let choice = prompt_text(&menu, "Choose 1-9 or Enter to save/exit", "", false)?;
         let c = choice.trim().to_lowercase();
 
         if c.is_empty() {
@@ -1245,10 +1249,27 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                 settings.usage.enabled =
                     prompt_confirm(&scr, "Send anonymous usage stats?", settings.usage.enabled)?;
             }
+            "9" | "experiments" | "labs" => {
+                let mut scr = Screen::new("Experiments");
+                scr.push(Line::from(dim(
+                    "Experimental extras. Right now that's the lyrics relay: a push-only",
+                )));
+                scr.push(Line::from(dim(
+                    "WebSocket feed of the live song + lyric line, served by the web",
+                )));
+                scr.push(Line::from(dim("panel at /song/ws.")));
+                scr.blank();
+                scr.push(Line::from(dim(
+                    "When enabled, the Experiments card appears in the web panel.",
+                )));
+                scr.blank();
+                settings.experiments.enabled =
+                    prompt_confirm(&scr, "Enable experiments?", settings.experiments.enabled)?;
+            }
             _ => {
                 let mut scr = Screen::new("Settings editor");
                 scr.push(Line::from(yellow(
-                    "Unknown choice — pick 1-8 or press Enter.",
+                    "Unknown choice — pick 1-9 or press Enter.",
                 )));
                 prompt_continue(&scr)?;
                 continue;

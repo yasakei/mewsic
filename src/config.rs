@@ -104,6 +104,7 @@ pub struct Settings {
     pub lyrics: LyricsSettings,
     pub relay: RelaySettings,
     pub usage: UsageSettings,
+    pub experiments: ExperimentsSettings,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -232,6 +233,12 @@ impl Default for TimingSettings {
 #[serde(default)]
 pub struct UpdateSettings {
     pub auto_start: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExperimentsSettings {
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

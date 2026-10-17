@@ -512,6 +512,17 @@ mod tests {
         }
     }
 
+    #[test]
+    fn panel_hides_experiments_card_until_enabled() {
+        assert!(
+            PANEL_HTML.contains("id=\"expCard\" style=\"display:none\""),
+            "experiments card must start hidden"
+        );
+        for needle in ["id=\"experiments\"", "updateExperimentsVisibility"] {
+            assert!(PANEL_HTML.contains(needle), "panel must expose {needle}");
+        }
+    }
+
     // ── end-to-end: a real loopback WS session through handle() ────────────
 
     fn make_ctx(relay: crate::config::RelaySettings) -> (AppContext, Arc<std::sync::RwLock<Settings>>) {

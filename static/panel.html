@@ -425,7 +425,7 @@
       <div class="row"><span class="lbl">Preview</span><div class="grow"><div id="preview"></div></div></div>
     </section>
 
-    <section class="card" aria-label="experiments">
+    <section class="card" aria-label="experiments" id="expCard" style="display:none">
       <h2>Experiments</h2>
       <div class="row"><label class="lbl" for="relayEnabled">Lyrics relay (WebSocket)</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayEnabled"><span class="track"></span></label></div></div>
       <p class="hint">Push-only feed of the live song + lyric line at /song/ws. Only that route is reachable from outside; token, settings and saves stay local.</p>
@@ -478,6 +478,8 @@
       <div class="row"><label class="lbl" for="autoStart">Auto-start on login</label><div class="grow end"><label class="switch"><input type="checkbox" id="autoStart"><span class="track"></span></label></div></div>
       <div class="row"><label class="lbl" for="telemetry">Usage telemetry</label><div class="grow end"><label class="switch"><input type="checkbox" id="telemetry"><span class="track"></span></label></div></div>
       <p class="hint">Anonymous install id + OS + version, once per run. See mewsic.yasakei.dev/usage.</p>
+      <div class="row"><label class="lbl" for="experiments">Experiments</label><div class="grow end"><label class="switch"><input type="checkbox" id="experiments"><span class="track"></span></label></div></div>
+      <p class="hint">Reveals the Experiments card (lyrics relay). Off = hidden.</p>
     </section>
   </div>
 </main>
@@ -538,6 +540,7 @@ function bindSettings() {
   setVal("samples", settings.timing.autooffset);
   setCheck("autoStart", settings.update.auto_start);
   setCheck("telemetry", settings.usage ? settings.usage.enabled !== false : true);
+  setCheck("experiments", settings.experiments ? settings.experiments.enabled === true : false);
   const rel = settings.relay || {};
   setCheck("relayEnabled", !!rel.enabled);
   setVal("relayMax", rel.max_clients ?? 8);
@@ -575,6 +578,7 @@ function bindSettings() {
   updateSourceVisibility();
   updateAdvancedVisibility();
   updateLyricsVisibility();
+  updateExperimentsVisibility();
   renderPreview();
 }
 function collectSettings() {
@@ -606,6 +610,7 @@ function collectSettings() {
     },
     update: { auto_start: $("autoStart").checked },
     usage: { enabled: $("telemetry").checked },
+    experiments: { enabled: $("experiments").checked },
     relay: {
       enabled: $("relayEnabled").checked,
       max_clients: clampRelayMax($("relayMax").value),
@@ -722,6 +727,9 @@ function updateAdvancedVisibility() {
 }
 function updateLyricsVisibility() {
   $("customRow").style.display = $("provCustom").checked ? "" : "none";
+}
+function updateExperimentsVisibility() {
+  $("expCard").style.display = $("experiments").checked ? "" : "none";
 }
 function clampRelayMax(raw) {
   const n = parseInt(raw, 10);
@@ -867,9 +875,9 @@ async function checkToken() {
     setTimeout(() => { btn.className = "btn"; btn.textContent = "check"; btn.disabled = false; }, 2200);
   }
 }
-["timestamp","label","autoClear","advanced","autoOffset","autoStart","telemetry"].forEach(id => {
+["timestamp","label","autoClear","advanced","autoOffset","autoStart","telemetry","experiments"].forEach(id => {
   const el = $(id);
-  if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); });
+  if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); if (id === "experiments") updateExperimentsVisibility(); queueSave(); renderPreview(); });
 });
 ["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser","localPref"].forEach(id => {
   const el = $(id);

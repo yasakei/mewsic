@@ -108,9 +108,10 @@ ever reachable from outside; the token, settings and saves stay behind the
 local-only panel check.
 
 > [!NOTE]
-> Don't see the **Experiments** card in the web panel? It's hidden until you
-> enable experiments from settings. Turn experiments on first, and the card
-> (with the relay controls) appears in the panel.
+> Don't see the **Experiments** card in the web panel? It's hidden until
+> experiments are on. Enable them with `mewsic settings` → section 9, or the
+> **Experiments** switch in the panel's *System* card — the card appears
+> without a restart.
 
 Any page can follow along with:
 
