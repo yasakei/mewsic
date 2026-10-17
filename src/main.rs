@@ -152,6 +152,14 @@ fn run(with_web: bool) {
     engine.spawn_auto_update();
     relay::start(&ctx, engine.quit().clone());
 
+    // The relay is served by the web panel listener, so if it's enabled the
+    // panel comes up in whatever mode mewsic runs in (plain TUI, headless) —
+    // including the autostart-at-login path.
+    if !with_web && ctx.settings.read().unwrap().relay.enabled {
+        log::write("relay: enabled — starting web panel for it");
+        with_web = true;
+    }
+
     if interactive {
         if with_web {
             web::start(&ctx);

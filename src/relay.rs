@@ -385,6 +385,10 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
         ctx.config_dir.clone(),
     ));
     std::thread::spawn(move || {
+        let enabled = ctx.settings.read().unwrap().relay.enabled;
+        if enabled {
+            crate::log::write("relay: enabled — serving /song/ws with mewsic");
+        }
         let mut child: Option<Child> = None;
         loop {
             if quit.load(Ordering::SeqCst) {

@@ -138,6 +138,16 @@ tunnel_name = "mewsic-relay"
 tunnel_host = "lyrics.yasakei.dev"
 ```
 
+#### Auto-start with mewsic
+
+The relay (and its tunnel) come up whenever mewsic runs — including the
+desktop autostart path (`Auto-start on login` in the panel / `System` card).
+If mewsic would normally run without the web panel (plain TUI, headless),
+an enabled relay starts the panel listener anyway, since that's what serves
+`/song/ws`. Disable the relay in the Experiments card (or `enabled = false`
+in settings.toml) to turn everything off; the tunnel process is stopped
+when mewsic exits.
+
 #### Quick tunnel (no setup)
 
 Leave `tunnel_name` empty, turn the tunnel toggle on → `cloudflared tunnel
