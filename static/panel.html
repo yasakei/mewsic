@@ -412,7 +412,7 @@
       <p class="hint indent">Token lives in your OS keychain, never in plaintext. Last.fm covers YouTube Music and any scrobbling player. Local reads the player on this machine with exact position.</p>
     </section>
 
-    <section class="card" aria-label="status">
+    <section class="card span2" aria-label="status" id="statusCard">
       <h2>Status</h2>
       <div class="row"><label class="lbl" for="timestamp">Timestamp</label><div class="grow end"><label class="switch"><input type="checkbox" id="timestamp"><span class="track"></span></label></div></div>
       <div class="row"><label class="lbl" for="label">“Song lyrics –” label</label><div class="grow end"><label class="switch"><input type="checkbox" id="label"><span class="track"></span></label></div></div>
@@ -729,7 +729,11 @@ function updateLyricsVisibility() {
   $("customRow").style.display = $("provCustom").checked ? "" : "none";
 }
 function updateExperimentsVisibility() {
-  $("expCard").style.display = $("experiments").checked ? "" : "none";
+  const on = $("experiments").checked;
+  $("expCard").style.display = on ? "" : "none";
+  // the grid pairs cards two by two — when Experiments is hidden, let
+  // Status take the full row so no hole is left behind
+  $("statusCard").classList.toggle("span2", !on);
 }
 function clampRelayMax(raw) {
   const n = parseInt(raw, 10);

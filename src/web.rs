@@ -518,6 +518,10 @@ mod tests {
             PANEL_HTML.contains("id=\"expCard\" style=\"display:none\""),
             "experiments card must start hidden"
         );
+        assert!(
+            PANEL_HTML.contains("class=\"card span2\" aria-label=\"status\""),
+            "status card must start full-width so the grid has no hole"
+        );
         for needle in ["id=\"experiments\"", "updateExperimentsVisibility"] {
             assert!(PANEL_HTML.contains(needle), "panel must expose {needle}");
         }
