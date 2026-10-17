@@ -54,6 +54,42 @@ impl Source {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RelaySettings {
+    /// Serve the live lyric line as a WebSocket (`/song/ws`) so remote pages
+    /// can follow along. Intended to be exposed via a cloudflared tunnel;
+    /// every other panel route stays local-only.
+    pub enabled: bool,
+    /// Hard cap on concurrent relay clients (the anti-nuke lever).
+    pub max_clients: u16,
+    /// When set, requires `?token=` on the WS handshake.
+    pub token: String,
+    /// Launch a tunnel automatically (needs cloudflared on PATH).
+    /// With `tunnel_name` set it runs that NAMED tunnel (your own domain);
+    /// otherwise a throwaway quick tunnel (*.trycloudflare.com).
+    pub tunnel: bool,
+    /// Name of a custom (named) cloudflared tunnel created with
+    /// `cloudflared tunnel create NAME`. Empty = quick tunnel.
+    pub tunnel_name: String,
+    /// Public hostname routed to the named tunnel via
+    /// `cloudflared tunnel route dns NAME HOST` — used to build the link.
+    pub tunnel_host: String,
+}
+
+impl Default for RelaySettings {
+    fn default() -> Self {
+        RelaySettings {
+            enabled: false,
+            max_clients: 8,
+            token: String::new(),
+            tunnel: false,
+            tunnel_name: String::new(),
+            tunnel_host: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -66,7 +102,9 @@ pub struct Settings {
     pub timing: TimingSettings,
     pub update: UpdateSettings,
     pub lyrics: LyricsSettings,
+    pub relay: RelaySettings,
     pub usage: UsageSettings,
+    pub experiments: ExperimentsSettings,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -195,6 +233,13 @@ impl Default for TimingSettings {
 #[serde(default)]
 pub struct UpdateSettings {
     pub auto_start: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExperimentsSettings {
+    pub enabled: bool,
+    pub terminal_title: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -542,5 +587,32 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn relay_block_parses_and_defaults_off() {
+        let s: Settings = toml::from_str("").unwrap();
+        assert!(!s.relay.enabled, "relay must default off");
+        assert_eq!(s.relay.max_clients, 8);
+        assert!(s.relay.token.is_empty());
+
+        let s: Settings = toml::from_str(
+            r#"
+            [relay]
+            enabled = true
+            max_clients = 3
+            token = "t"
+            tunnel = true
+            tunnel_name = "mewsic-relay"
+            tunnel_host = "lyrics.yasakei.dev"
+        "#,
+        )
+        .unwrap();
+        assert!(s.relay.enabled);
+        assert_eq!(s.relay.max_clients, 3);
+        assert_eq!(s.relay.token, "t");
+        assert!(s.relay.tunnel);
+        assert_eq!(s.relay.tunnel_name, "mewsic-relay");
+        assert_eq!(s.relay.tunnel_host, "lyrics.yasakei.dev");
     }
 }

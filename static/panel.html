@@ -5,223 +5,285 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mewsic · control panel</title>
 <style>
+  /* ── neo-brutalist design system ─────────────────────────────────────────
+     rules: flat color, thick borders everywhere, hard offset shadows, zero
+     radius, uppercase headings-as-stickers, mono for values. one system,
+     two themes. ────────────────────────────────────────────────────────── */
   :root {
     color-scheme: light;
     --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
     --sans: "Segoe UI", "Noto Sans", "Liberation Sans", Arial, sans-serif;
-    --bg: #f6f6f8;
-    --card: #ffffff;
-    --surface: #fafafa;
-    --ink: #24232a;
-    --muted: #73717e;
-    --line: #e7e6ed;
-    --accent: #7560bd;
-    --accent-soft: #f1edf9;
-    --good: #27825d;
-    --bad: #c34b56;
-    --switch-off: #ceccd6;
-    --radius: 12px;
+    --bg: #f3eee2;
+    --card: #fffdf5;
+    --surface: #faf6ea;
+    --ink: #141217;
+    --muted: #5f5872;
+    --line: #141217;      /* structural borders (3px) */
+    --rule: #c9c2b1;      /* internal card dividers */
+    --accent: #7c5cff;
+    --accent-soft: #eeeaff;
+    --good: #2fae7f;
+    --bad: #ff5252;
+    --sticker: #ffd84d;   /* the pop color */
+    --switch-off: #d8d2c2;
+    --shadow: #141217;
+    --paper-dot: #d8d1bf;
   }
   [data-theme="dark"] {
     color-scheme: dark;
-    --bg: #141418;
-    --card: #1b1b20;
-    --surface: #17171c;
-    --ink: #eeedf3;
-    --muted: #a09dab;
-    --line: #303037;
-    --accent: #b0a0e5;
-    --accent-soft: #2b263b;
-    --good: #85c7a5;
-    --bad: #ed8b97;
-    --switch-off: #494750;
+    --bg: #2a2639;
+    --card: #242031;
+    --surface: #2e2940;
+    --ink: #f2effa;
+    --muted: #a49ec4;
+    --line: #ede8fa;
+    --rule: #4a4460;
+    --accent: #a08dff;
+    --accent-soft: #3a3454;
+    --good: #4fd6a2;
+    --bad: #ff6d6d;
+    --sticker: #ffd84d;
+    --switch-off: #4a4460;
+    --shadow: #0d0b14;
+    --paper-dot: #35304a;
   }
-  *, *::before, *::after { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: border-box; border-radius: 0; }
   html { min-width: 320px; -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; font-family: var(--sans); font-size: 14px; line-height: 1.5;
-    background: var(--bg); color: var(--ink);
+    background: var(--bg);
+    background-image: radial-gradient(var(--paper-dot) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--ink);
     -webkit-font-smoothing: antialiased;
   }
-  ::selection { background: var(--accent); color: var(--bg); }
+  ::selection { background: var(--sticker); color: #141217; }
   button, input, select, textarea { font: inherit; }
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  a { color: var(--accent); text-underline-offset: 3px; }
-  .wrap { max-width: 1060px; margin: 0 auto; padding: 24px 28px 40px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  a { color: var(--ink); text-underline-offset: 3px; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 26px 28px 44px; }
+
+  /* header */
   header.top {
     display: flex; align-items: center; gap: 12px;
-    padding-bottom: 20px; margin-bottom: 20px;
-    border-bottom: 1px solid var(--line);
+    padding-bottom: 22px; margin-bottom: 24px;
+    border-bottom: 3px solid var(--line);
   }
   h1.wordmark {
-    font-size: 27px; margin: 0; letter-spacing: -.055em; line-height: 1;
-    font-weight: 700; font-family: Georgia, "Times New Roman", serif;
-    display: flex; align-items: center; gap: 10px;
+    font-size: 26px; margin: 0; line-height: 1;
+    font-weight: 900; letter-spacing: -.02em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--sticker); color: #141217;
+    border: 3px solid #141217; box-shadow: 4px 4px 0 var(--shadow);
+    padding: 6px 14px;
   }
   h1.wordmark svg {
     width: .72em; height: .72em; display: block; overflow: visible; flex-shrink: 0;
-    color: var(--ink);
   }
   .spacer { flex: 1; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    color: var(--muted); padding: 6px 0 6px 6px; min-height: 32px;
-    font-size: 12px; font-weight: 500; white-space: nowrap;
-  }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; flex-shrink: 0; }
-  .dot.on { background: var(--good); }
-  .dot.off { background: var(--bad); }
   .icon-btn {
     display: inline-grid; place-items: center; flex-shrink: 0;
-    border: 1px solid var(--line); background: transparent; color: var(--muted);
-    border-radius: 8px; width: 34px; height: 34px; padding: 0; cursor: pointer;
-    transition: background .18s, color .18s, border-color .18s;
+    border: 2px solid var(--line); background: var(--card); color: var(--ink);
+    width: 38px; height: 38px; padding: 0; cursor: pointer;
+    box-shadow: 3px 3px 0 var(--shadow);
+    transition: transform .12s, box-shadow .12s, background .12s, color .12s;
   }
-  .icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .icon-btn:hover { background: var(--sticker); color: #141217; transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+  .icon-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--shadow); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 9px;
+    border: 2px solid var(--line); background: var(--card);
+    box-shadow: 3px 3px 0 var(--shadow);
+    color: var(--ink); padding: 8px 14px; min-height: 32px; cursor: default;
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em;
+    white-space: nowrap;
+  }
+  .dot { width: 9px; height: 9px; background: var(--muted); border: 2px solid var(--line); display: inline-block; flex-shrink: 0; }
+  .dot.on { background: var(--good); }
+  /* filled vs hollow reads without relying on color alone */
+  .dot.off { background: transparent; border-color: var(--bad); }
+
+  /* update banner */
   #updBanner {
-    border: 1px solid var(--line); border-left: 3px solid var(--accent);
-    background: var(--accent-soft); border-radius: 8px; overflow-wrap: anywhere;
-    padding: 12px 16px; font-size: 12px; margin: 0 0 16px;
+    border: 3px solid var(--line); background: var(--sticker); color: #141217;
+    box-shadow: 5px 5px 0 var(--shadow); overflow-wrap: anywhere;
+    padding: 12px 16px; font-size: 12px; font-weight: 700; margin: 0 0 24px;
   }
   #updBanner.hidden { display: none; }
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+
+  /* grid + cards */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
   .card {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 20px;
-    margin: 0; min-width: 0; height: 100%;
+    background: var(--card); border: 3px solid var(--line);
+    box-shadow: 6px 6px 0 var(--shadow);
+    padding: 20px; margin: 0; min-width: 0; height: 100%;
   }
   .card.span2 { grid-column: 1 / -1; }
   .card h2 {
-    font-size: 14px; line-height: 1.4; font-weight: 600; letter-spacing: -.01em;
-    color: var(--ink); margin: 0 0 14px;
+    display: inline-block; font-size: 13px; line-height: 1.3;
+    font-weight: 900; text-transform: uppercase; letter-spacing: .09em;
+    background: var(--sticker); color: #141217; border: 2px solid #141217;
+    box-shadow: 3px 3px 0 var(--shadow);
+    padding: 3px 10px; margin: 0 0 18px;
   }
-  .card.now { position: relative; }
-  .player-heading { margin-bottom: 12px; }
+  .card.now {
+    background: var(--sticker); border-color: #141217; color: #141217;
+  }
   .card.now h2 {
-    color: var(--muted); font-size: 11px; font-weight: 500; margin: 0;
+    background: #141217; color: var(--sticker); border-color: #141217; box-shadow: none; margin: 0;
   }
+  .player-heading { margin-bottom: 14px; }
   .player-body, .player-info { min-width: 0; }
-  #npTitle { font-size: 21px; font-weight: 600; line-height: 1.45; letter-spacing: -.02em; overflow-wrap: anywhere; }
-  #npArtist { color: var(--muted); margin-top: 3px; font-size: 12px; overflow-wrap: anywhere; }
-  .player-progress { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
-  .bar { flex: 1; height: 3px; border-radius: 999px; background: var(--line); overflow: hidden; }
-  #npBar { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .3s ease-out; }
-  #npTime { font-family: var(--mono); font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .card.now #npTitle { font-size: 23px; font-weight: 900; line-height: 1.4; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .card.now #npArtist { color: #141217; opacity: .72; margin-top: 4px; font-size: 12px; font-family: var(--mono); font-weight: 700; overflow-wrap: anywhere; }
+  .player-progress { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+  .bar { flex: 1; height: 16px; border: 2px solid #141217; background: #fffdf5; overflow: hidden; padding: 2px; }
+  #npBar { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease-out; }
+  #npTime { font-family: var(--mono); font-size: 11px; font-weight: 800; color: #141217; font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
   #npLine {
-    margin-top: 14px; border-left: 2px solid var(--accent); padding: 2px 12px;
-    color: var(--ink); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere;
+    margin-top: 16px; border-left: 4px solid #141217; padding: 3px 12px;
+    color: #141217; font-size: 13px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere;
   }
-  .meta {
-    display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px;
-    font-size: 10px; color: var(--muted); overflow-wrap: anywhere;
+  .card.now .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px;
+    font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .09em;
+    color: #141217; overflow-wrap: anywhere;
   }
-  .meta b { color: var(--ink); font-weight: 400; margin-left: 4px; }
-  .row { display: flex; align-items: center; gap: 16px; padding: 10px 0; }
-  .row + .row { border-top: 1px solid var(--line); }
-  .row label.lbl, .row span.lbl { width: 150px; flex-shrink: 0; font-size: 13px; font-weight: 400; }
+  .meta b {
+    color: var(--sticker); background: #141217; padding: 2px 8px; margin-left: 6px;
+    font-family: var(--mono); font-weight: 700; letter-spacing: 0; text-transform: none;
+  }
+
+  /* rows */
+  .row { display: flex; align-items: center; gap: 16px; padding: 11px 0; }
+  .row + .row { border-top: 2px dashed var(--rule); }
+  .row label.lbl, .row span.lbl { width: 150px; flex-shrink: 0; font-size: 13px; font-weight: 700; }
   .row .grow { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
   .row .grow.end { justify-content: flex-end; }
-  .hint { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 3px 0 0; overflow-wrap: anywhere; }
+  .hint { font-size: 11px; color: var(--muted); font-weight: 600; line-height: 1.6; margin: 3px 0 0; overflow-wrap: anywhere; }
   .hint.indent { margin-left: 166px; }
+
+  /* inputs */
   input[type="text"], input[type="password"], input[type="number"], select, textarea {
-    width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px;
-    background: var(--surface); color: var(--ink);
-    min-height: 36px; padding: 8px 10px; font-size: 12px;
-    transition: border-color .18s, box-shadow .18s;
+    width: 100%; min-width: 0; border: 2px solid var(--line); background: var(--card); color: var(--ink);
+    min-height: 38px; padding: 8px 12px; font-size: 12px; font-weight: 600;
+    transition: border-color .12s, box-shadow .12s, transform .12s;
   }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
-  input[type="number"] { max-width: 100px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 3px 3px 0 var(--accent); outline: none; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; font-weight: 500; }
+  input[type="number"] { max-width: 110px; font-family: var(--mono); font-weight: 800; font-variant-numeric: tabular-nums; }
   textarea { resize: vertical; line-height: 1.7; font-family: var(--mono); }
   select { max-width: 360px; cursor: pointer; text-overflow: ellipsis; }
+
+  /* buttons */
   .btn {
-    min-height: 36px; padding: 8px 13px; border-radius: 7px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--card); color: var(--ink); flex-shrink: 0;
-    font-size: 12px; font-weight: 500; white-space: nowrap;
-    transition: border-color .18s, background .18s, color .18s;
+    min-height: 38px; padding: 8px 14px; cursor: pointer;
+    border: 2px solid var(--line); background: var(--card); color: var(--ink); flex-shrink: 0;
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap;
+    box-shadow: 3px 3px 0 var(--shadow);
+    transition: transform .12s, box-shadow .12s, background .12s, color .12s;
   }
-  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-  #checkToken { background: var(--accent); border-color: var(--accent); color: var(--card); }
-  #checkToken:hover:not(:disabled) { background: var(--ink); border-color: var(--ink); }
+  .btn:hover:not(:disabled) { background: var(--sticker); color: #141217; transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+  .btn:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--shadow); }
+  #checkToken { background: var(--ink); color: var(--sticker); }
+  #checkToken:hover:not(:disabled) { background: var(--ink); color: var(--sticker); }
   .btn:disabled, .pbtn:disabled { opacity: .5; cursor: default; }
-  .btn.ok, #checkToken.ok { border-color: var(--good); color: var(--good); background: var(--accent-soft); }
-  .btn.err, #checkToken.err { border-color: var(--bad); color: var(--bad); background: var(--surface); }
+  .btn.ok, #checkToken.ok { background: var(--good); color: #10241d; }
+  .btn.err, #checkToken.err { background: var(--bad); color: #2a0808; }
+
+  /* switches — square, chunky */
   .switch { position: relative; display: inline-flex; align-items: center; min-height: 28px; cursor: pointer; flex-shrink: 0; }
   .switch input { position: absolute; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
   .track {
-    display: block; width: 38px; height: 22px; border-radius: 999px; background: var(--switch-off);
-    position: relative; transition: background .18s;
+    display: block; width: 44px; height: 24px; border: 2px solid var(--line);
+    background: var(--switch-off); position: relative; transition: background .15s;
   }
   .track::after {
-    content: ""; position: absolute; top: 3px; left: 3px;
-    width: 16px; height: 16px; border-radius: 50%; background: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, .16); transition: transform .18s;
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; background: var(--card); border: 2px solid var(--line);
+    transition: transform .15s;
   }
   .switch input:checked + .track { background: var(--accent); }
-  [data-theme="dark"] .switch input:checked + .track::after { background: #272231; }
-  .switch input:checked + .track::after { transform: translateX(16px); }
-  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .switch input:checked + .track::after { transform: translateX(20px); background: var(--card); }
+  .switch input:focus-visible + .track { outline: 3px solid var(--accent); outline-offset: 3px; }
   .switch input:disabled + .track { opacity: .5; }
-  .check { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
-  .check input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+  /* checkboxes + badges */
+  .check { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
   .exp {
-    display: inline-block; font-size: 8px; font-weight: 600; letter-spacing: .025em;
-    color: var(--muted); line-height: 1.6; vertical-align: middle;
-    border: 1px solid var(--line); border-radius: 4px;
+    display: inline-block; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+    color: #141217; background: var(--sticker); border: 2px solid #141217;
+    line-height: 1.6; vertical-align: middle;
     padding: 1px 5px; white-space: nowrap;
   }
-  .plist { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .psection { min-width: 0; margin-bottom: 8px; }
+
+  /* provider list */
+  .plist { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding-top: 4px; }
+  .psection { min-width: 0; margin-bottom: 10px; }
   .phdr {
-    font-size: 12px; font-weight: 500; margin-bottom: 12px;
+    font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px;
     display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px;
   }
-  .phdr .hint { font-size: 10px; font-weight: 400; }
+  .phdr .hint { font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; }
   .pitem {
-    display: flex; align-items: center; gap: 7px; min-width: 0;
-    border: 1px solid var(--line); border-radius: 7px;
-    padding: 6px 8px; min-height: 40px; background: var(--surface);
-    transition: border-color .18s, box-shadow .18s, opacity .18s;
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    border: 2px solid var(--line); background: var(--surface);
+    box-shadow: 3px 3px 0 var(--shadow);
+    padding: 7px 10px; min-height: 42px;
+    transition: opacity .15s, outline-color .12s;
   }
+  .pitem:hover { background: var(--card); }
   .pitem.dragging { opacity: .4; }
-  .pitem.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .pitem.over { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .pitem.off { opacity: .55; }
   .pitem.off .check { color: var(--muted); }
-  .pitem.off .rank { opacity: .45; }
-  .grip { cursor: grab; color: var(--muted); font-size: 16px; line-height: 1; user-select: none; }
+  .grip { cursor: grab; color: var(--ink); font-size: 16px; line-height: 1; user-select: none; }
   .grip:active { cursor: grabbing; }
   .rank {
-    font-family: var(--mono); font-size: 9px; color: var(--muted);
-    min-width: 12px; text-align: center;
+    font-family: var(--mono); font-size: 10px; font-weight: 800; color: var(--accent);
+    min-width: 14px; text-align: center;
   }
   .pitem .check { display: block; flex: 1; min-width: 0; line-height: 1.8; overflow-wrap: anywhere; }
   .pitem .check input { vertical-align: middle; margin-right: 5px; }
   .pitem .check .exp { margin-left: 3px; }
   .pbtns, .grip, .rank { flex-shrink: 0; }
-  .pbtns { display: flex; gap: 4px; }
+  .pbtns { display: flex; gap: 5px; }
   .pbtn {
-    border: 1px solid var(--line); background: var(--card); color: var(--muted);
-    border-radius: 7px; width: 28px; height: 28px; cursor: pointer;
-    font-size: 7px; line-height: 1; display: grid; place-items: center; padding: 0;
-    transition: border-color .18s, background .18s, color .18s;
+    border: 2px solid var(--line); background: var(--card); color: var(--ink);
+    width: 28px; height: 28px; cursor: pointer;
+    font-size: 8px; line-height: 1; font-weight: 900; display: grid; place-items: center; padding: 0;
+    box-shadow: 2px 2px 0 var(--shadow);
+    transition: transform .12s, box-shadow .12s, background .12s, color .12s;
   }
-  .pbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .pbtn:hover:not(:disabled) { background: var(--sticker); color: #141217; transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow); }
+
+  /* preview */
   .stack { display: flex; flex-direction: column; gap: 10px; }
   #preview {
-    width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--surface);
-    padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--ink);
+    width: 100%; border: 2px solid var(--line); background: var(--surface);
+    padding: 10px 12px; font-size: 12px; line-height: 1.65; font-family: var(--mono); color: var(--ink);
     white-space: pre-wrap; overflow-wrap: anywhere;
   }
+
+  /* saved toast */
   #savedFlag {
     position: fixed; bottom: 24px; right: 24px; z-index: 50;
-    background: var(--ink); color: var(--bg); max-width: calc(100vw - 32px);
-    font-size: 10px; font-weight: 600; letter-spacing: .1em;
-    padding: 12px 20px; border-radius: 999px;
+    background: var(--sticker); color: #141217; border: 3px solid #141217;
+    box-shadow: 5px 5px 0 var(--shadow);
+    max-width: calc(100vw - 32px);
+    font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    padding: 12px 22px;
     opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; pointer-events: none;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, .12);
   }
   #savedFlag.show { opacity: 1; transform: translateY(0); }
-  #savedFlag.error { background: #b6403b; color: #fff; }
+  #savedFlag.error { background: var(--bad); }
+
+  /* bento: keep wide-card controls from trailing off half the tile */
+  @media (min-width: 821px) {
+    .card.span2 select { max-width: 480px; }
+  }
   @media (max-width: 1000px) {
     .wrap { padding-left: 24px; padding-right: 24px; }
     .row { gap: 12px; }
@@ -239,11 +301,11 @@
   @media (max-width: 560px) {
     .wrap { padding: 16px 14px 24px; }
     header.top { gap: 10px; padding-bottom: 16px; margin-bottom: 16px; }
-    h1.wordmark { font-size: 25px; gap: 8px; }
-    .pill { font-size: 11px; }
-    .grid { gap: 12px; }
-    .card { padding: 16px; }
-    #npTitle { font-size: 18px; }
+    h1.wordmark { font-size: 22px; gap: 8px; }
+    .pill { font-size: 10px; }
+    .grid { gap: 14px; }
+    .card { padding: 16px; box-shadow: 4px 4px 0 var(--shadow); }
+    .card.now #npTitle { font-size: 19px; }
     .meta { gap: 6px 14px; }
     .row { flex-wrap: wrap; gap: 9px; }
     .row label.lbl, .row span.lbl { width: 100%; font-size: 13px; }
@@ -261,7 +323,7 @@
   }
   @media (max-width: 380px) {
     .wrap { padding-left: 12px; padding-right: 12px; }
-    h1.wordmark { font-size: 24px; gap: 6px; }
+    h1.wordmark { font-size: 20px; gap: 6px; }
     .pill { gap: 6px; font-size: 10px; }
     .pitem { gap: 5px; padding: 8px; }
     .pitem .check { font-size: 11px; }
@@ -350,7 +412,7 @@
       <p class="hint indent">Token lives in your OS keychain, never in plaintext. Last.fm covers YouTube Music and any scrobbling player. Local reads the player on this machine with exact position.</p>
     </section>
 
-    <section class="card" aria-label="status">
+    <section class="card span2" aria-label="status" id="statusCard">
       <h2>Status</h2>
       <div class="row"><label class="lbl" for="timestamp">Timestamp</label><div class="grow end"><label class="switch"><input type="checkbox" id="timestamp"><span class="track"></span></label></div></div>
       <div class="row"><label class="lbl" for="label">“Song lyrics –” label</label><div class="grow end"><label class="switch"><input type="checkbox" id="label"><span class="track"></span></label></div></div>
@@ -363,10 +425,28 @@
       <div class="row"><span class="lbl">Preview</span><div class="grow"><div id="preview"></div></div></div>
     </section>
 
-    <section class="card" aria-label="lyrics">
+    <section class="card" aria-label="experiments" id="expCard" style="display:none">
+      <h2>Experiments</h2>
+      <div class="row"><label class="lbl" for="relayEnabled">Lyrics relay (WebSocket)</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayEnabled"><span class="track"></span></label></div></div>
+      <p class="hint">Push-only feed of the live song + lyric line at /song/ws. Only that route is reachable from outside; token, settings and saves stay local.</p>
+      <div class="row"><label class="lbl" for="expTitle">Terminal title now-playing</label><div class="grow end"><label class="switch"><input type="checkbox" id="expTitle"><span class="track"></span></label></div></div>
+      <p class="hint">The terminal dashboard mirrors song + current lyric line into the window title.</p>
+      <div class="row"><label class="lbl" for="relayMax">Max listeners</label><div class="grow end"><input type="number" id="relayMax" min="1" max="64"></div></div>
+      <p class="hint">Hard cap on concurrent connections — extra ones get rejected (429).</p>
+      <div class="row"><label class="lbl" for="relayToken">Access token</label><div class="grow"><input type="text" id="relayToken" autocomplete="off" spellcheck="false" placeholder="empty = anyone with the link"></div></div>
+      <div class="row"><label class="lbl" for="relayTunnel">Run cloudflared tunnel</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayTunnel"><span class="track"></span></label></div></div>
+      <p class="hint">Needs cloudflared on PATH. Empty name = quick tunnel that publishes a temporary *.trycloudflare.com link.</p>
+      <div class="row"><label class="lbl" for="relayTunnelName">Custom tunnel name</label><div class="grow"><input type="text" id="relayTunnelName" autocomplete="off" spellcheck="false" placeholder="empty = quick tunnel"></div></div>
+      <div class="row"><label class="lbl" for="relayTunnelHost">Custom host</label><div class="grow"><input type="text" id="relayTunnelHost" autocomplete="off" spellcheck="false" placeholder="e.g. lyrics.example.com"></div></div>
+      <p class="hint">Your own domain = your own named tunnel. One-time setup, then NAME + HOST here and Mewsic keeps it alive: <span style="font-family:var(--mono)">tunnel login</span> · <span style="font-family:var(--mono)">tunnel create NAME</span> · <span style="font-family:var(--mono)">tunnel route dns NAME HOST</span></p>
+      <div class="row"><label class="lbl" for="relayLink">Relay link</label><div class="grow"><input type="text" id="relayLink" readonly placeholder="not running"></div><button class="btn" id="relayCopy" type="button">copy</button></div>
+      <p class="hint" id="relayMeta">listeners: —</p>
+    </section>
+
+    <section class="card span2" aria-label="lyrics">
       <h2>Lyrics</h2>
       <div class="psection">
-        <div class="phdr">Providers <span class="hint" style="display:inline">drag to reorder · top is tried first</span></div>
+        <div class="phdr">Providers <span class="hint" style="display:inline">drag to reorder · earlier = tried first</span></div>
         <div class="plist" id="plist">
           <div class="pitem" data-id="lrclib" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provLrclib" value="lrclib"> LrcLib</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
           <div class="pitem" data-id="netease" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provNetease" value="netease"> NetEase Music</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
@@ -400,6 +480,8 @@
       <div class="row"><label class="lbl" for="autoStart">Auto-start on login</label><div class="grow end"><label class="switch"><input type="checkbox" id="autoStart"><span class="track"></span></label></div></div>
       <div class="row"><label class="lbl" for="telemetry">Usage telemetry</label><div class="grow end"><label class="switch"><input type="checkbox" id="telemetry"><span class="track"></span></label></div></div>
       <p class="hint">Anonymous install id + OS + version, once per run. See mewsic.yasakei.dev/usage.</p>
+      <div class="row"><label class="lbl" for="experiments">Experiments</label><div class="grow end"><label class="switch"><input type="checkbox" id="experiments"><span class="track"></span></label></div></div>
+      <p class="hint">Reveals the Experiments card (lyrics relay). Off = hidden.</p>
     </section>
   </div>
 </main>
@@ -460,6 +542,15 @@ function bindSettings() {
   setVal("samples", settings.timing.autooffset);
   setCheck("autoStart", settings.update.auto_start);
   setCheck("telemetry", settings.usage ? settings.usage.enabled !== false : true);
+  setCheck("experiments", settings.experiments ? settings.experiments.enabled === true : false);
+  setCheck("expTitle", settings.experiments ? settings.experiments.terminal_title === true : false);
+  const rel = settings.relay || {};
+  setCheck("relayEnabled", !!rel.enabled);
+  setVal("relayMax", rel.max_clients ?? 8);
+  setVal("relayToken", rel.token || "");
+  setCheck("relayTunnel", !!rel.tunnel);
+  setVal("relayTunnelName", rel.tunnel_name || "");
+  setVal("relayTunnelHost", rel.tunnel_host || "");
   $("token").value = "";
   $("token").placeholder = settings.hasToken
     ? "saved in your OS keychain — paste a new token to replace"
@@ -490,6 +581,7 @@ function bindSettings() {
   updateSourceVisibility();
   updateAdvancedVisibility();
   updateLyricsVisibility();
+  updateExperimentsVisibility();
   renderPreview();
 }
 function collectSettings() {
@@ -521,6 +613,18 @@ function collectSettings() {
     },
     update: { auto_start: $("autoStart").checked },
     usage: { enabled: $("telemetry").checked },
+    experiments: {
+      enabled: $("experiments").checked,
+      terminal_title: $("expTitle").checked
+    },
+    relay: {
+      enabled: $("relayEnabled").checked,
+      max_clients: clampRelayMax($("relayMax").value),
+      token: $("relayToken").value.replace(/"/g, "").trim(),
+      tunnel: $("relayTunnel").checked,
+      tunnel_name: $("relayTunnelName").value.replace(/"/g, "").trim(),
+      tunnel_host: $("relayTunnelHost").value.replace(/"/g, "").trim()
+    },
     lyrics: {
       providers: collectLyricsProviders(),
       romanize: $("romanize").checked,
@@ -630,6 +734,17 @@ function updateAdvancedVisibility() {
 function updateLyricsVisibility() {
   $("customRow").style.display = $("provCustom").checked ? "" : "none";
 }
+function updateExperimentsVisibility() {
+  const on = $("experiments").checked;
+  $("expCard").style.display = on ? "" : "none";
+  // the grid pairs cards two by two — when Experiments is hidden, let
+  // Status take the full row so no hole is left behind
+  $("statusCard").classList.toggle("span2", !on);
+}
+function clampRelayMax(raw) {
+  const n = parseInt(raw, 10);
+  return isNaN(n) ? 8 : Math.min(64, Math.max(1, n));
+}
 function clampOffset(raw) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return 500;
@@ -733,6 +848,22 @@ async function pollState() {
     $("liveText").textContent = "offline";
   }
 }
+async function pollRelay() {
+  try {
+    const res = await fetch("/api/relay");
+    const r = await res.json();
+    const token = $("relayToken").value.trim();
+    const link = r.url ? "wss://" + r.url.replace(/^https:\/\//, "") + "/song/ws" + (token ? "?token=" + encodeURIComponent(token) : "") : "";
+    $("relayLink").value = link;
+    let state = r.enabled ? "on" : "off";
+    let tail = "";
+    if (r.error) tail = " · tunnel: " + r.error;
+    else if (r.tunnel) tail = r.url ? ` · tunnel: ${r.url}` : " · tunnel: starting…";
+    $("relayMeta").textContent = `${state} · listeners: ${r.clients}/${r.maxClients}${tail}`;
+  } catch (e) {
+    $("relayMeta").textContent = "listeners: —";
+  }
+}
 async function checkToken() {
   const btn = $("checkToken");
   const token = $("token").value.trim();
@@ -754,9 +885,9 @@ async function checkToken() {
     setTimeout(() => { btn.className = "btn"; btn.textContent = "check"; btn.disabled = false; }, 2200);
   }
 }
-["timestamp","label","autoClear","advanced","autoOffset","autoStart","telemetry"].forEach(id => {
+["timestamp","label","autoClear","advanced","autoOffset","autoStart","telemetry","experiments"].forEach(id => {
   const el = $(id);
-  if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); queueSave(); renderPreview(); });
+  if (el) el.addEventListener("change", () => { if (id === "advanced") updateAdvancedVisibility(); if (id === "experiments") updateExperimentsVisibility(); queueSave(); renderPreview(); });
 });
 ["emoji","advEmoji","offset","samples","token","lastfmKey","lastfmUser","localPref"].forEach(id => {
   const el = $(id);
@@ -769,6 +900,19 @@ async function checkToken() {
 ["customName","customUrl","customKey","customPath"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("input", () => queueSave());
+});
+["relayEnabled","relayTunnel","relayMax","relayToken","relayTunnelName","relayTunnelHost","expTitle"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("change", () => queueSave());
+  if (el) el.addEventListener("input", () => queueSave());
+});
+$("relayCopy").addEventListener("click", async () => {
+  const v = $("relayLink").value;
+  if (!v) return;
+  try { await navigator.clipboard.writeText(v); }
+  catch (_) { $("relayLink").select(); document.execCommand("copy"); }
+  $("relayCopy").textContent = "copied";
+  setTimeout(() => { $("relayCopy").textContent = "copy"; }, 1200);
 });
 $("source").addEventListener("change", () => { updateSourceVisibility(); queueSave(); });
 $("advTemplate").addEventListener("input", () => { queueSave(); renderPreview(); });
@@ -789,6 +933,7 @@ initTheme();
 initProviderReorder();
 loadSettings();
 pollState();
-setInterval(pollState, 1000);</script>
+pollRelay();
+setInterval(() => { pollState(); pollRelay(); }, 1000);</script>
 </body>
 </html>

@@ -20,6 +20,7 @@ pub const PANEL_URL: &str = "http://localhost:8999";
 type Term = Terminal<CrosstermBackend<std::io::Stdout>>;
 
 static TERMINAL: Mutex<Option<Term>> = Mutex::new(None);
+static LAST_TITLE: Mutex<String> = Mutex::new(String::new());
 
 pub fn stdout_is_tty() -> bool {
     std::io::stdout().is_terminal()
@@ -475,8 +476,7 @@ pub fn choose_startup_mode() -> StartupMode {
     }
 }
 
-pub fn show_web_panel_hint(panel_ready: bool) {
-    let mut screen = Screen::new("Web panel");
+pub fn show_web_panel_hint(panel_ready: bool) {    let mut screen = Screen::new("Web panel");
     screen.blank();
     if panel_ready {
         screen.push(Line::from(green(&format!(
@@ -494,6 +494,25 @@ pub fn show_web_panel_hint(panel_ready: bool) {
         )));
     }
     let _ = prompt_continue(&screen);
+}
+
+/// Ctrl+B: start the panel and open it, or explain the failure in a proper
+/// TUI screen (never via eprintln — that would smear over the live render).
+fn toggle_web_panel(ctx: &AppContext) {
+    if crate::web::start(ctx) {
+        crate::web::open_browser();
+        return;
+    }
+    let mut s = Screen::new("Web panel");
+    s.blank();
+    s.push(Line::from(red(
+        "Could not start the web panel — port 8999 is already in use.",
+    )));
+    s.blank();
+    s.push(Line::from(dim(
+        "Another mewsic instance is probably holding it. Details are in the log.",
+    )));
+    let _ = prompt_continue(&s);
 }
 
 pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
@@ -997,12 +1016,16 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
             cyan_bold("8"),
             Span::raw("  Privacy (telemetry)"),
         ]));
+        menu.push(Line::from(vec![
+            cyan_bold("9"),
+            Span::raw("  Experiments (web panel extras)"),
+        ]));
         menu.blank();
         menu.push(Line::from(dim(
             "Pick a section to edit, or press Enter to save & exit.",
         )));
 
-        let choice = prompt_text(&menu, "Choose 1-8 or Enter to save/exit", "", false)?;
+        let choice = prompt_text(&menu, "Choose 1-9 or Enter to save/exit", "", false)?;
         let c = choice.trim().to_lowercase();
 
         if c.is_empty() {
@@ -1227,10 +1250,48 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
                 settings.usage.enabled =
                     prompt_confirm(&scr, "Send anonymous usage stats?", settings.usage.enabled)?;
             }
+            "9" | "experiments" | "labs" => {
+                let mut scr = Screen::new("Experiments");
+                scr.push(Line::from(cyan_bold("Available experiments:")));
+                scr.blank();
+                scr.push(Line::from(vec![
+                    cyan_bold("  relay"),
+                    Span::raw("  — lyrics relay (web panel)"),
+                ]));
+                scr.push(Line::from(dim(
+                    "     Push-only WebSocket feed of the live song + lyric line,",
+                )));
+                scr.push(Line::from(dim(
+                    "     served by the web panel at /song/ws.",
+                )));
+                scr.blank();
+                scr.push(Line::from(vec![
+                    cyan_bold("  title"),
+                    Span::raw("  — terminal title now-playing"),
+                ]));
+                scr.push(Line::from(dim(
+                    "     The dashboard mirrors song + current lyric line into",
+                )));
+                scr.push(Line::from(dim(
+                    "     your terminal's window title.",
+                )));
+                scr.blank();
+                scr.push(Line::from(dim(
+                    "Enabling experiments reveals the Experiments card in the web panel.",
+                )));
+                scr.blank();
+                settings.experiments.enabled =
+                    prompt_confirm(&scr, "Enable experiments?", settings.experiments.enabled)?;
+                settings.experiments.terminal_title = prompt_confirm(
+                    &scr,
+                    "Show song + lyric line in the terminal title?",
+                    settings.experiments.terminal_title,
+                )?;
+            }
             _ => {
                 let mut scr = Screen::new("Settings editor");
                 scr.push(Line::from(yellow(
-                    "Unknown choice — pick 1-8 or press Enter.",
+                    "Unknown choice — pick 1-9 or press Enter.",
                 )));
                 prompt_continue(&scr)?;
                 continue;
@@ -1258,6 +1319,23 @@ fn info_row(label: &str, value: &str) -> Line<'static> {
         Span::styled("│ ", Style::default().fg(Color::DarkGray)),
         Span::raw(value.to_string()),
     ])
+}
+
+fn update_terminal_title(settings: &crate::config::Settings, title: &str) {
+    if !settings.experiments.terminal_title {
+        return;
+    }
+    if LAST_TITLE.lock().unwrap().as_str() == title {
+        return;
+    }
+    if crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::SetTitle(title.to_string())
+    )
+    .is_ok()
+    {
+        *LAST_TITLE.lock().unwrap() = title.to_string();
+    }
 }
 
 pub fn render_dashboard(ctx: &AppContext) {
@@ -1289,6 +1367,10 @@ pub fn render_dashboard(ctx: &AppContext) {
         0.0
     };
     let playing = if pb.is_playing { "▶" } else { "⏸" };
+    update_terminal_title(
+        &settings,
+        &format!("♪ {song} — {artist} · {lyrics}"),
+    );
     let emoji = if settings.view.emoji.is_empty() {
         String::new()
     } else {
@@ -1455,9 +1537,8 @@ fn poll_remote_shortcut(ctx: &AppContext) -> bool {
                 }
                 if matches!(k.code, KeyCode::Char('b') | KeyCode::Char('B'))
                     && k.modifiers.contains(KeyModifiers::CONTROL)
-                    && crate::web::start(ctx)
                 {
-                    crate::web::open_browser();
+                    toggle_web_panel(ctx);
                 }
                 false
             }
@@ -1498,10 +1579,9 @@ pub fn poll_shortcut(ctx: &AppContext) -> bool {
                             let _ = run_settings_editor(ctx);
                         }
                         KeyCode::Char('b') | KeyCode::Char('B')
-                            if k.modifiers.contains(KeyModifiers::CONTROL)
-                                && crate::web::start(ctx) =>
+                            if k.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
-                            crate::web::open_browser();
+                            toggle_web_panel(ctx);
                         }
                         _ => {}
                     }
