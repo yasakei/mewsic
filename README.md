@@ -4,9 +4,9 @@
 
 **Keep your Discord status singing along — lyric line by lyric line.**
 
-Mewsic watches your Spotify playback through your Discord connection (or your
-Last.fm scrobbles) and mirrors each lyric line into your Discord status in
-real time. One tiny native binary, written in safe Rust.
+Mewsic watches what you're listening to and puts the *current lyric line*
+into your Discord status, updating in real time. One tiny native binary,
+written in safe Rust.
 
 ![Release](https://img.shields.io/github/v/release/yasakei/mewsic?style=flat-square&label=release&color=f5a97f)
 ![CI](https://img.shields.io/github/actions/workflow/status/yasakei/mewsic/check.yml?branch=main&style=flat-square&label=CI&color=a6da95)
@@ -16,47 +16,57 @@ real time. One tiny native binary, written in safe Rust.
 
 ---
 
-## Features
+## Quick start
 
-- **Three playback sources** — Spotify via your Discord connection (no local
-  player needed), Last.fm scrobbles (covers YouTube Music via
-  [WebScrobbler](https://webscrobbler.com/), and any scrobbling player),
-  or the local player on your machine (MPRIS on Linux, Spotify/Music on
-  macOS, media controls on Windows — exact position, no scrobble lag).
-- **Synced lyrics** from LrcLib, NetEase Music, QQ Music, Last.fm transcripts
-  and YouTube captions (no key needed) — pick any combination, or plug in a
-  custom provider (URL template + optional JSON path). Cached on disk, so
-  repeat plays are instant.
-- **Romanization** — Japanese, Korean, Hindi, Bangla, Punjabi, Cyrillic,
-  Greek, Arabic, Armenian, Georgian, Thai, Lao and Khmer lyrics transliterated
-  locally into Latin letters; Chinese passes through. Fully data-driven and user-overridable (see
-  [Romanization](#romanization)).
-- **Ahead-of-time line sync** — fixed offset, or an auto-offset that learns
-  your Discord API latency.
-- **Your style** — timestamp, emoji, labels, or a fully custom template.
-  Status clears on song change (optional).
-- **Terminal dashboard** with live progress bar, plus a web panel at
-  `http://127.0.0.1:8999`.
-- **Detached background mode** — `mewsic background` outlives your terminal;
-  run `mewsic` again to re-attach.
-- **Self-updating** — checks the release API, verifies checksums, swaps the
-  binary in place.
-
-## Getting started
+Two commands and you're off:
 
 ```sh
-mewsic setup    # one-time wizard (Discord token, source, providers)
-mewsic          # dashboard + engine
+mewsic setup    # one-time wizard — asks for your Discord token, source, lyrics providers
+mewsic          # done! dashboard opens, your status starts singing
 ```
 
-**Requirements:** a Discord user token, plus either Spotify connected to
-Discord (*Settings → Connections → Spotify*) or a
-[Last.fm API key](https://www.last.fm/api/account/create) with something
-actively scrobbling.
+> [!IMPORTANT]
+> You need a **Discord user token**, plus **one** of these:
+>
+> - **Spotify connected to Discord** — *Settings → Connections → Spotify* (no API key), or
+> - a **[Last.fm API key](https://www.last.fm/api/account/create)** with something actively scrobbling.
+
+That's the whole setup. Everything below is optional polish.
+
+## Where does mewsic get the song from?
+
+Pick whichever matches how you listen — you can set this (and change it) in the setup wizard.
+
+| Source | Good for | Requires | Notes |
+|---|---|---|---|
+| **Spotify via Discord** | I just use Spotify | Spotify connected to your Discord account | No local player needed, no API key |
+| **Last.fm scrobbles** | YouTube Music, or players that scrobble | [Last.fm API key](https://www.last.fm/api/account/create) | Covers any scrobbling player (YouTube Music works via [WebScrobbler](https://webscrobbler.com/)) |
+| **Local player** | I play music on this machine | Your media player works with the OS | MPRIS on Linux, Spotify/Music on macOS, media controls on Windows. Exact position, no scrobble lag |
 
 > [!NOTE]
 > Last.fm doesn't report playback position, so progress is estimated with a
 > local clock — sync stays accurate while a song plays straight through.
+
+## What you get
+
+- **Synced lyrics** from LrcLib, NetEase Music, QQ Music, Last.fm transcripts
+  and YouTube captions — no API key needed. Pick any combination, or plug in
+  a custom provider (a URL template + optional JSON path). Lyrics are cached
+  on disk, so repeat plays are instant.
+- **Romanization** — Japanese, Korean, Hindi, Bangla, Punjabi, Cyrillic,
+  Greek, Arabic, Armenian, Georgian, Thai, Lao and Khmer lyrics transliterated
+  locally into Latin letters; Chinese passes through. Fully data-driven and
+  user-overridable (see [Romanization](#romanization)).
+- **Ahead-of-time line sync** — a fixed offset, or an auto-offset that learns
+  your Discord API latency.
+- **Your style** — timestamp, emoji, labels, or a fully custom template.
+  Status can clear on song change (optional).
+- **Terminal dashboard** with a live progress bar, plus a web panel at
+  `http://127.0.0.1:8999`.
+- **Background mode** — `mewsic background` survives closing your terminal;
+  run `mewsic` again anytime to re-attach.
+- **Self-updating** — checks the release API, verifies checksums, swaps the
+  binary in place.
 
 ## Commands
 
@@ -74,24 +84,37 @@ actively scrobbling.
 | `mewsic update check`    | report only, don't install                |
 | `mewsic uninstall`       | remove autostart and the installed binary |
 
-## Configuration
+## Where settings live
 
-Settings live in `settings.toml` under your config directory
-(`~/.config/mewsic`, or `%APPDATA%\mewsic` on Windows; override with
-`$MEWSIC_CONFIG_DIR`). The wizard and settings editor write it for you.
+Settings are in `settings.toml` under your config directory:
 
-Your Discord token never touches that file — it's stored in the OS credential
-manager (Keychain / Credential Manager / Secret Service), with a `0600`
-fallback file on systems without a keyring.
+- Linux/macOS: `~/.config/mewsic`
+- Windows: `%APPDATA%\mewsic`
+- Override with `$MEWSIC_CONFIG_DIR`
 
-### Lyrics relay (experimental)
+You normally never edit it by hand — the wizard (`mewsic setup`) and the
+settings editor (`mewsic settings`) write it for you.
 
-The panel's **Experiments** card can expose your live song + lyric line as a
-push-only WebSocket at `/song/ws` so other pages can follow along. Only that
-one route is ever reachable from outside — the token, settings and saves stay
-behind the local-only panel check.
+**About your Discord token:** it never touches `settings.toml`. It's stored
+in your OS credential manager (Keychain / Credential Manager / Secret
+Service), with a `0600` fallback file only on systems without a keyring.
 
-**WS payload** (one JSON message per state/line change, ~1/s while playing):
+### Share your lyrics with the world (experimental)
+
+Want your friends (or a webpage) to see what you're listening to? The web
+panel's **Experiments** card can expose your live song + lyric line as a
+push-only WebSocket at `/song/ws` — even through a tunnel, so it works from
+anywhere. Only that one route is ever reachable from outside; the token,
+settings and saves stay behind the local-only panel check.
+
+Any page can follow along with:
+
+```js
+const ws = new WebSocket("wss://your.host/song/ws");
+ws.onmessage = e => { const s = JSON.parse(e.data); renderNowPlaying(s); };
+```
+
+Messages are one JSON object per state/line change (~1/s while playing):
 
 ```json
 {
@@ -102,58 +125,17 @@ behind the local-only panel check.
 }
 ```
 
-Quick consumer from any page:
-
-```js
-const ws = new WebSocket("wss://your.host/song/ws");
-ws.onmessage = e => { const s = JSON.parse(e.data); renderNowPlaying(s); };
-```
-
-#### Options (panel: Experiments card, or `[relay]` in settings.toml)
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `enabled` | `false` | Serve the WS feed at `/song/ws` (through a tunnel) |
-| `max_clients` | `8` | Concurrent listener cap; extra connections get `429` |
-| `token` | *(empty)* | When set, the handshake requires `?token=` (`401` otherwise) |
-| `tunnel` | `false` | Start cloudflared automatically (a quick tunnel if `tunnel_name` is empty) |
-| `tunnel_name` | *(empty)* | Name of your **own** cloudflared tunnel → custom domain mode |
-| `tunnel_host` | *(empty)* | Public hostname routed to the tunnel; builds the display link |
-
-Also enforced regardless of config: inbound messages are capped at 8 per
-10s per client (over the cap = disconnected) and frames larger than 4 KiB
-are rejected (close code 1009).
-
-TOML example:
-
-```toml
-[relay]
-enabled = true
-max_clients = 8
-token = "pick-a-long-secret"
-tunnel = true
-
-# custom domain (optional — see one-time setup below)
-tunnel_name = "mewsic-relay"
-tunnel_host = "lyrics.yasakei.dev"
-```
-
-#### Auto-start with mewsic
-
-The relay (and its tunnel) come up whenever mewsic runs — including the
-desktop autostart path (`Auto-start on login` in the panel / `System` card).
-If mewsic would normally run without the web panel (plain TUI, headless),
-an enabled relay starts the panel listener anyway, since that's what serves
-`/song/ws`. Disable the relay in the Experiments card (or `enabled = false`
-in settings.toml) to turn everything off; the tunnel process is stopped
-when mewsic exits.
+<details>
+<summary><strong>Two ways to make it reachable (click to expand)</strong></summary>
 
 #### Quick tunnel (no setup)
 
-Leave `tunnel_name` empty, turn the tunnel toggle on → `cloudflared tunnel
---url http://127.0.0.1:8999` runs and Mewsic parses the temporary
-`*.trycloudflare.com` link from its output and shows it in the panel. The
-link rotates every restart; reconnect consumers to whatever is current.
+Leave `tunnel_name` empty and turn the tunnel toggle on. Mewsic runs
+`cloudflared tunnel --url http://127.0.0.1:8999`, parses the temporary
+`*.trycloudflare.com` link from its output and shows it in the panel.
+
+Heads up: the link rotates every restart — reconnect consumers to whatever
+is current.
 
 #### Custom domain (your own named tunnel)
 
@@ -167,40 +149,89 @@ cloudflared tunnel route dns mewsic-relay lyrics.yasakei.dev
 
 Then set `tunnel_name = "mewsic-relay"` and `tunnel_host =
 "lyrics.yasakei.dev"` in the panel (or `[relay]` in settings.toml). Mewsic
-runs `cloudflared tunnel run mewsic-relay`, restarts it if it dies, stops it
-when mewsic quits, and displays `wss://lyrics.yasakei.dev/song/ws` (+ your
-`?token=`) as the relay link. Works with the quick-tunnel toggle off.
+runs `cloudflared tunnel run mewsic-relay`, restarts it if it dies, and
+stops it when mewsic quits. The panel shows
+`wss://lyrics.yasakei.dev/song/ws` (+ your `?token=`). Works with the
+quick-tunnel toggle off.
+
+#### All relay options
+
+Set these in the panel's Experiments card, or `[relay]` in settings.toml:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `false` | Serve the WS feed at `/song/ws` (through a tunnel) |
+| `max_clients` | `8` | Concurrent listener cap; extra connections get `429` |
+| `token` | *(empty)* | When set, the handshake requires `?token=` (`401` otherwise) |
+| `tunnel` | `false` | Start cloudflared automatically (a quick tunnel if `tunnel_name` is empty) |
+| `tunnel_name` | *(empty)* | Name of your **own** cloudflared tunnel → custom domain mode |
+| `tunnel_host` | *(empty)* | Public hostname routed to the tunnel; builds the display link |
+
+```toml
+[relay]
+enabled = true
+max_clients = 8
+token = "pick-a-long-secret"
+tunnel = true
+
+# custom domain (optional — see one-time setup above)
+tunnel_name = "mewsic-relay"
+tunnel_host = "lyrics.yasakei.dev"
+```
 
 The relay link and listener count update live in the Experiments card at
 `GET /api/relay` — local only, like the rest of the panel.
 
+#### Background behavior
+
+The relay (and its tunnel) come up whenever mewsic runs — including the
+desktop autostart path (`Auto-start on login` in the panel / `System` card).
+If mewsic would normally run without the web panel (plain TUI, headless),
+an enabled relay starts the panel listener anyway, since that's what serves
+`/song/ws`. Disable the relay to turn everything off; the tunnel process is
+stopped when mewsic exits.
+
+Regardless of config: inbound messages are capped at 8 per 10s per client
+(over the cap = disconnected) and frames larger than 4 KiB are rejected
+(close code 1009).
+
+</details>
+
 ### Telemetry
 
-By default mewsic sends one short, anonymous request per run so we can publish
-"how many people use mewsic on which OS" graphs. The payload is only:
-a random install id, your OS, your CPU architecture and the app version —
-**never IPs, usernames, tokens, or song data**. Aggregate stats live at
+By default mewsic sends **one short, anonymous request per run** so we can
+publish "how many people use mewsic on which OS" graphs:
+a random install id, your OS, CPU architecture and app version — **never
+IPs, usernames, tokens, or song data**. Aggregate stats are public at
 [`mewsic.yasakei.dev/usage`](https://mewsic.yasakei.dev/usage).
 
-Counts are keyed by the install id, not by how often you launch mewsic — run
-it a hundred times a day and you still count as one user. Your id is a random
-string generated once per installation (persisted in `~/.config/mewsic/install_id`)
-and the server keeps it for 90 days.
+Running it a hundred times a day still counts as one user (counts are keyed
+by install id, and the server keeps the id for 90 days).
 
-Opt out any time with `mewsic settings` → section 8, the web panel's *system*
-section, `usage.enabled = false` in `settings.toml`, or the environment
-variable `MEWSIC_NO_TELEMETRY=1`.
+<details>
+<summary><strong>How to opt out (click to expand)</strong></summary>
 
-## Romanization
+Any of these works:
+
+- `mewsic settings` → section 8
+- the web panel's *system* section
+- `usage.enabled = false` in `settings.toml`
+- environment variable `MEWSIC_NO_TELEMETRY=1`
+
+</details>
+
+## Hack on it
+
+### Romanization
 
 Every letter-to-Latin table lives in [`romanize/`](romanize/) — **one TOML
 file per script**. A build script embeds the folder automatically, so adding
 a script is just dropping in a file. Copy
 [`romanize/template.toml`](romanize/template.toml) to start.
 
-You can override or extend scripts without rebuilding: put a TOML with the
-same name in `~/.config/mewsic/romanize/` and your entries win (new names add
-new scripts). Test any change instantly with:
+You can override or extend scripts *without rebuilding*: put a TOML with the
+same name in `~/.config/mewsic/romanize/` and your entries win (new names
+add new scripts). Test any change instantly:
 
 ```sh
 mewsic romanize "日本語の歌詞"    # nihongo no kashi
@@ -216,7 +247,7 @@ Two table kinds:
 Kana and Hangul are handled algorithmically; Chinese hanzi pass through
 (pinyin needs a dictionary).
 
-## Building
+### Build it yourself
 
 ```sh
 cargo build --release
