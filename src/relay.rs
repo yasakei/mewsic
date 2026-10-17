@@ -41,6 +41,7 @@ const LIVENESS_PING_SECS: u64 = 25;
 
 static CLIENTS: AtomicUsize = AtomicUsize::new(0);
 static TUNNEL_URL: Mutex<Option<String>> = Mutex::new(None);
+static TUNNEL_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn clients() -> usize {
     CLIENTS.load(Ordering::SeqCst)
@@ -48,6 +49,11 @@ pub fn clients() -> usize {
 
 pub fn tunnel_url() -> Option<String> {
     TUNNEL_URL.lock().unwrap().clone()
+}
+
+/// Last tunnel failure (cloudflared missing, exited early, …) for the panel.
+pub fn tunnel_error() -> Option<String> {
+    TUNNEL_ERROR.lock().unwrap().clone()
 }
 
 fn unix_ms() -> u64 {
@@ -398,9 +404,18 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
                 continue;
             }
             child = match spawn_cloudflared() {
-                Ok(c) => Some(c),
+                Ok(c) => {
+                    *TUNNEL_ERROR.lock().unwrap() = None;
+                    Some(c)
+                }
                 Err(e) => {
-                    crate::log::write(&format!("relay: cloudflared not started: {e}"));
+                    let msg = if e.kind() == std::io::ErrorKind::NotFound {
+                        "cloudflared not found — install it or add it to PATH".to_string()
+                    } else {
+                        format!("cloudflared failed to start: {e}")
+                    };
+                    *TUNNEL_ERROR.lock().unwrap() = Some(msg.clone());
+                    crate::log::write(&format!("relay: {msg} ({e})"));
                     if sleep_interruptible(&quit, Duration::from_secs(60)) {
                         return;
                     }
@@ -408,8 +423,25 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
                 }
             };
             if let Some(c) = child.as_mut() {
-                harvest_url(c);
+                // Drain BOTH pipes: cloudflared logs (and the quick-tunnel URL)
+                // go to stderr, and an unread pipe would fill up and stall it.
+                let drain_out = c.stdout.take();
+                let drain_err = c.stderr.take();
+                let mut readers = Vec::new();
+                if let Some(out) = drain_out {
+                    readers.push(std::thread::spawn(move || scan_stream(out)));
+                }
+                if let Some(err) = drain_err {
+                    readers.push(std::thread::spawn(move || scan_stream(err)));
+                }
                 let _ = c.wait(); // block until the tunnel process dies
+                for r in readers {
+                    let _ = r.join();
+                }
+                if tunnel_url().is_none() && tunnel_error().is_none() {
+                    *TUNNEL_ERROR.lock().unwrap() =
+                        Some("tunnel exited before publishing a link".to_string());
+                }
                 crate::log::write("relay: cloudflared exited");
                 *TUNNEL_URL.lock().unwrap() = None;
                 // brief cooldown before a respawn attempt
@@ -425,21 +457,26 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
 }
 
 fn spawn_cloudflared() -> std::io::Result<Child> {
-    Command::new("cloudflared")
-        .args(["tunnel", "--url", "http://127.0.0.1:8999", "--no-autoupdate"])
+    let mut cmd = Command::new("cloudflared");
+    cmd.args(["tunnel", "--url", "http://127.0.0.1:8999", "--no-autoupdate"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdin(Stdio::null())
-        .spawn()
+        .stdin(Stdio::null());
+    #[cfg(windows)]
+    {
+        // Don't flash a console window along with the app.
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.spawn()
 }
 
-/// Reads the tunnel process stdout until a trycloudflare.com URL appears
-/// (then remembers it) or stdout closes. Does not reap the process.
-fn harvest_url(child: &mut Child) {
-    let Some(out) = child.stdout.take() else {
-        return;
-    };
-    for line in BufReader::new(out).lines().map_while(|l| l.ok()) {
+/// Consumes one pipe end of a tunnel process until EOF, harvesting a
+/// trycloudflare.com URL if one shows up. Keeps reading after the URL so the
+/// pipe never fills up and blocks cloudflared.
+fn scan_stream<R: Read>(pipe: R) {
+    for line in BufReader::new(pipe).lines().map_while(|l| l.ok()) {
         if !line.contains("trycloudflare.com") {
             continue;
         }
@@ -453,10 +490,13 @@ fn harvest_url(child: &mut Child) {
             .map(|(i, _)| i)
             .unwrap_or(rest.len());
         let url = format!("https://{}", &rest[..end]);
-        if url.ends_with(".trycloudflare.com") {
+        if !url.ends_with(".trycloudflare.com") {
+            continue;
+        }
+        let mut guard = TUNNEL_URL.lock().unwrap();
+        if guard.is_none() {
             crate::log::write(&format!("relay: tunnel ready at {url}"));
-            *TUNNEL_URL.lock().unwrap() = Some(url);
-            break;
+            *guard = Some(url);
         }
     }
 }

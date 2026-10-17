@@ -271,6 +271,7 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
                 "enabled": settings.enabled,
                 "tunnel": settings.tunnel,
                 "url": crate::relay::tunnel_url(),
+                "error": crate::relay::tunnel_error(),
                 "clients": crate::relay::clients(),
                 "maxClients": settings.max_clients.clamp(1, 64),
                 "hasToken": !settings.token.is_empty(),

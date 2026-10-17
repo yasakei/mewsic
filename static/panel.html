@@ -770,7 +770,8 @@ async function pollRelay() {
     $("relayLink").value = link;
     let state = r.enabled ? "on" : "off";
     let tail = "";
-    if (r.tunnel) tail = r.url ? ` · tunnel: ${r.url}` : " · tunnel: starting…";
+    if (r.error) tail = " · tunnel: " + r.error;
+    else if (r.tunnel) tail = r.url ? ` · tunnel: ${r.url}` : " · tunnel: starting…";
     $("relayMeta").textContent = `${state} · listeners: ${r.clients}/${r.maxClients}${tail}`;
   } catch (e) {
     $("relayMeta").textContent = "listeners: —";
