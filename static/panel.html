@@ -101,7 +101,8 @@
   }
   .dot { width: 9px; height: 9px; background: var(--muted); border: 2px solid var(--line); display: inline-block; flex-shrink: 0; }
   .dot.on { background: var(--good); }
-  .dot.off { background: var(--bad); }
+  /* filled vs hollow reads without relying on color alone */
+  .dot.off { background: transparent; border-color: var(--bad); }
 
   /* update banner */
   #updBanner {
@@ -112,7 +113,7 @@
   #updBanner.hidden { display: none; }
 
   /* grid + cards */
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
   .card {
     background: var(--card); border: 3px solid var(--line);
     box-shadow: 6px 6px 0 var(--shadow);
@@ -185,8 +186,8 @@
   }
   .btn:hover:not(:disabled) { background: var(--sticker); color: #141217; transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
   .btn:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--shadow); }
-  #checkToken { background: var(--accent); color: #fffdf5; }
-  #checkToken:hover:not(:disabled) { background: var(--accent); color: #fffdf5; }
+  #checkToken { background: var(--ink); color: var(--sticker); }
+  #checkToken:hover:not(:disabled) { background: var(--ink); color: var(--sticker); }
   .btn:disabled, .pbtn:disabled { opacity: .5; cursor: default; }
   .btn.ok, #checkToken.ok { background: var(--good); color: #10241d; }
   .btn.err, #checkToken.err { background: var(--bad); color: #2a0808; }
@@ -279,6 +280,10 @@
   #savedFlag.show { opacity: 1; transform: translateY(0); }
   #savedFlag.error { background: var(--bad); }
 
+  /* bento: keep wide-card controls from trailing off half the tile */
+  @media (min-width: 821px) {
+    .card.span2 select { max-width: 480px; }
+  }
   @media (max-width: 1000px) {
     .wrap { padding-left: 24px; padding-right: 24px; }
     .row { gap: 12px; }
@@ -420,10 +425,26 @@
       <div class="row"><span class="lbl">Preview</span><div class="grow"><div id="preview"></div></div></div>
     </section>
 
-    <section class="card" aria-label="lyrics">
+    <section class="card" aria-label="experiments">
+      <h2>Experiments</h2>
+      <div class="row"><label class="lbl" for="relayEnabled">Lyrics relay (WebSocket)</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayEnabled"><span class="track"></span></label></div></div>
+      <p class="hint">Push-only feed of the live song + lyric line at /song/ws. Only that route is reachable from outside; token, settings and saves stay local.</p>
+      <div class="row"><label class="lbl" for="relayMax">Max listeners</label><div class="grow end"><input type="number" id="relayMax" min="1" max="64"></div></div>
+      <p class="hint">Hard cap on concurrent connections — extra ones get rejected (429).</p>
+      <div class="row"><label class="lbl" for="relayToken">Access token</label><div class="grow"><input type="text" id="relayToken" autocomplete="off" spellcheck="false" placeholder="empty = anyone with the link"></div></div>
+      <div class="row"><label class="lbl" for="relayTunnel">Run cloudflared tunnel</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayTunnel"><span class="track"></span></label></div></div>
+      <p class="hint">Needs cloudflared on PATH. Empty name = quick tunnel that publishes a temporary *.trycloudflare.com link.</p>
+      <div class="row"><label class="lbl" for="relayTunnelName">Custom tunnel name</label><div class="grow"><input type="text" id="relayTunnelName" autocomplete="off" spellcheck="false" placeholder="empty = quick tunnel"></div></div>
+      <div class="row"><label class="lbl" for="relayTunnelHost">Custom host</label><div class="grow"><input type="text" id="relayTunnelHost" autocomplete="off" spellcheck="false" placeholder="e.g. lyrics.example.com"></div></div>
+      <p class="hint">Your own domain = your own named tunnel. One-time setup, then NAME + HOST here and Mewsic keeps it alive: <span style="font-family:var(--mono)">tunnel login</span> · <span style="font-family:var(--mono)">tunnel create NAME</span> · <span style="font-family:var(--mono)">tunnel route dns NAME HOST</span></p>
+      <div class="row"><label class="lbl" for="relayLink">Relay link</label><div class="grow"><input type="text" id="relayLink" readonly placeholder="not running"></div><button class="btn" id="relayCopy" type="button">copy</button></div>
+      <p class="hint" id="relayMeta">listeners: —</p>
+    </section>
+
+    <section class="card span2" aria-label="lyrics">
       <h2>Lyrics</h2>
       <div class="psection">
-        <div class="phdr">Providers <span class="hint" style="display:inline">drag to reorder · top is tried first</span></div>
+        <div class="phdr">Providers <span class="hint" style="display:inline">drag to reorder · earlier = tried first</span></div>
         <div class="plist" id="plist">
           <div class="pitem" data-id="lrclib" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provLrclib" value="lrclib"> LrcLib</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
           <div class="pitem" data-id="netease" draggable="true"><span class="grip" aria-hidden="true">⠿</span><span class="rank"></span><label class="check"><input type="checkbox" id="provNetease" value="netease"> NetEase Music</label><span class="pbtns"><button class="pbtn up" type="button" aria-label="move up">▲</button><button class="pbtn dn" type="button" aria-label="move down">▼</button></span></div>
@@ -450,22 +471,6 @@
       <div class="row"><label class="lbl" for="autoOffset">Autooffset</label><div class="grow end"><label class="switch"><input type="checkbox" id="autoOffset"><span class="track"></span></label></div></div>
       <p class="hint">Measure Discord latency and adjust automatically (+100ms).</p>
       <div class="row"><label class="lbl" for="samples">Samples</label><div class="grow end"><input type="number" id="samples" min="1" max="20"></div></div>
-    </section>
-
-    <section class="card" aria-label="experiments">
-      <h2>Experiments</h2>
-      <div class="row"><label class="lbl" for="relayEnabled">Lyrics relay (WebSocket)</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayEnabled"><span class="track"></span></label></div></div>
-      <p class="hint">Push-only feed of the live song + lyric line at /song/ws. Only that route is reachable from outside; token, settings and saves stay local.</p>
-      <div class="row"><label class="lbl" for="relayMax">Max listeners</label><div class="grow end"><input type="number" id="relayMax" min="1" max="64"></div></div>
-      <p class="hint">Hard cap on concurrent connections — extra ones get rejected (429).</p>
-      <div class="row"><label class="lbl" for="relayToken">Access token</label><div class="grow"><input type="text" id="relayToken" autocomplete="off" spellcheck="false" placeholder="empty = anyone with the link"></div></div>
-      <div class="row"><label class="lbl" for="relayTunnel">Run cloudflared tunnel</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayTunnel"><span class="track"></span></label></div></div>
-      <p class="hint">Needs cloudflared on PATH. Empty name = quick tunnel that publishes a temporary *.trycloudflare.com link.</p>
-      <div class="row"><label class="lbl" for="relayTunnelName">Custom tunnel name</label><div class="grow"><input type="text" id="relayTunnelName" autocomplete="off" spellcheck="false" placeholder="empty = quick tunnel"></div></div>
-      <div class="row"><label class="lbl" for="relayTunnelHost">Custom host</label><div class="grow"><input type="text" id="relayTunnelHost" autocomplete="off" spellcheck="false" placeholder="e.g. lyrics.example.com"></div></div>
-      <p class="hint">Your own domain = your own named tunnel. One-time setup, then NAME + HOST here and Mewsic keeps it alive: <span style="font-family:var(--mono)">tunnel login</span> · <span style="font-family:var(--mono)">tunnel create NAME</span> · <span style="font-family:var(--mono)">tunnel route dns NAME HOST</span></p>
-      <div class="row"><label class="lbl" for="relayLink">Relay link</label><div class="grow"><input type="text" id="relayLink" readonly placeholder="not running"></div><button class="btn" id="relayCopy" type="button">copy</button></div>
-      <p class="hint" id="relayMeta">listeners: —</p>
     </section>
 
     <section class="card" aria-label="system">
