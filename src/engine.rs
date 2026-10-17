@@ -306,8 +306,8 @@ impl Engine {
 
                 let payload = bridge_payload(&ctx);
                 let fingerprint = format!(
-                    "{}|{}|{}|{}|{}",
-                    payload.song, payload.line, payload.playing, payload.duration, payload.progress / 1000
+                    "{}|{}|{}|{}",
+                    payload.song, payload.line, payload.playing, payload.duration
                 );
                 if fingerprint != last_fingerprint
                     || last_post.elapsed() >= Duration::from_millis(BRIDGE_KEEPALIVE_MS)
