@@ -101,13 +101,19 @@ Service), with a `0600` fallback file only on systems without a keyring.
 
 ### Share your lyrics with the world (experimental)
 
-Want your friends (or a webpage) to see what you're listening to? The web
-panel's **Experiments** card can expose your live song + lyric line as a
-push-only WebSocket at `/song/ws` — even through a tunnel, so it works from
-anywhere. Only that one route is ever reachable from outside; the token,
-settings and saves stay behind the local-only panel check.
+Want your friends (or a webpage) to see what you're listening to? Mewsic can
+expose your live song + lyric line as a push-only WebSocket at `/song/ws` —
+even through a tunnel, so it works from anywhere. Only that one route is
+ever reachable from outside; the token, settings and saves stay behind the
+local-only panel check.
+
+> [!NOTE]
+> Don't see the **Experiments** card in the web panel? It's hidden until you
+> enable experiments from settings. Turn experiments on first, and the card
+> (with the relay controls) appears in the panel.
 
 Any page can follow along with:
+
 
 ```js
 const ws = new WebSocket("wss://your.host/song/ws");
