@@ -459,8 +459,11 @@
       <div class="row"><label class="lbl" for="relayMax">Max listeners</label><div class="grow end"><input type="number" id="relayMax" min="1" max="64"></div></div>
       <p class="hint">Hard cap on concurrent connections — extra ones get rejected (429).</p>
       <div class="row"><label class="lbl" for="relayToken">Access token</label><div class="grow"><input type="text" id="relayToken" autocomplete="off" spellcheck="false" placeholder="empty = anyone with the link"></div></div>
-      <div class="row"><label class="lbl" for="relayTunnel">Run cloudflared quick tunnel</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayTunnel"><span class="track"></span></label></div></div>
-      <p class="hint">Needs cloudflared on PATH. Publishes a temporary *.trycloudflare.com link and keeps it alive.</p>
+      <div class="row"><label class="lbl" for="relayTunnel">Run cloudflared tunnel</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayTunnel"><span class="track"></span></label></div></div>
+      <p class="hint">Needs cloudflared on PATH. Empty name = quick tunnel that publishes a temporary *.trycloudflare.com link.</p>
+      <div class="row"><label class="lbl" for="relayTunnelName">Custom tunnel name</label><div class="grow"><input type="text" id="relayTunnelName" autocomplete="off" spellcheck="false" placeholder="empty = quick tunnel"></div></div>
+      <div class="row"><label class="lbl" for="relayTunnelHost">Custom host</label><div class="grow"><input type="text" id="relayTunnelHost" autocomplete="off" spellcheck="false" placeholder="e.g. lyrics.example.com"></div></div>
+      <p class="hint">Your own domain = your own named tunnel. One-time setup, then NAME + HOST here and Mewsic keeps it alive: <span style="font-family:var(--mono)">tunnel login</span> · <span style="font-family:var(--mono)">tunnel create NAME</span> · <span style="font-family:var(--mono)">tunnel route dns NAME HOST</span></p>
       <div class="row"><label class="lbl" for="relayLink">Relay link</label><div class="grow"><input type="text" id="relayLink" readonly placeholder="not running"></div><button class="btn" id="relayCopy" type="button">copy</button></div>
       <p class="hint" id="relayMeta">listeners: —</p>
     </section>
@@ -535,6 +538,8 @@ function bindSettings() {
   setVal("relayMax", rel.max_clients ?? 8);
   setVal("relayToken", rel.token || "");
   setCheck("relayTunnel", !!rel.tunnel);
+  setVal("relayTunnelName", rel.tunnel_name || "");
+  setVal("relayTunnelHost", rel.tunnel_host || "");
   $("token").value = "";
   $("token").placeholder = settings.hasToken
     ? "saved in your OS keychain — paste a new token to replace"
@@ -600,7 +605,9 @@ function collectSettings() {
       enabled: $("relayEnabled").checked,
       max_clients: clampRelayMax($("relayMax").value),
       token: $("relayToken").value.replace(/"/g, "").trim(),
-      tunnel: $("relayTunnel").checked
+      tunnel: $("relayTunnel").checked,
+      tunnel_name: $("relayTunnelName").value.replace(/"/g, "").trim(),
+      tunnel_host: $("relayTunnelHost").value.replace(/"/g, "").trim()
     },
     lyrics: {
       providers: collectLyricsProviders(),
@@ -871,7 +878,7 @@ async function checkToken() {
   const el = $(id);
   if (el) el.addEventListener("input", () => queueSave());
 });
-["relayEnabled","relayTunnel","relayMax","relayToken"].forEach(id => {
+["relayEnabled","relayTunnel","relayMax","relayToken","relayTunnelName","relayTunnelHost"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("change", () => queueSave());
   if (el) el.addEventListener("input", () => queueSave());

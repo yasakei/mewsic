@@ -65,9 +65,16 @@ pub struct RelaySettings {
     pub max_clients: u16,
     /// When set, requires `?token=` on the WS handshake.
     pub token: String,
-    /// Launch `cloudflared tunnel --url http://127.0.0.1:8999` automatically
-    /// (quick tunnels; needs cloudflared on PATH).
+    /// Launch a tunnel automatically (needs cloudflared on PATH).
+    /// With `tunnel_name` set it runs that NAMED tunnel (your own domain);
+    /// otherwise a throwaway quick tunnel (*.trycloudflare.com).
     pub tunnel: bool,
+    /// Name of a custom (named) cloudflared tunnel created with
+    /// `cloudflared tunnel create NAME`. Empty = quick tunnel.
+    pub tunnel_name: String,
+    /// Public hostname routed to the named tunnel via
+    /// `cloudflared tunnel route dns NAME HOST` — used to build the link.
+    pub tunnel_host: String,
 }
 
 impl Default for RelaySettings {
@@ -77,6 +84,8 @@ impl Default for RelaySettings {
             max_clients: 8,
             token: String::new(),
             tunnel: false,
+            tunnel_name: String::new(),
+            tunnel_host: String::new(),
         }
     }
 }

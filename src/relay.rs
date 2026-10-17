@@ -396,16 +396,27 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
                 return;
             }
             let settings = ctx.settings.read().unwrap().clone();
-            let wanted = settings.relay.enabled && settings.relay.tunnel;
+            let named = settings.relay.tunnel_name.trim().to_string();
+            let host = normalized_host(&settings.relay.tunnel_host);
+            // named tunnel works with or without the quick-tunnel toggle on
+            let wanted = settings.relay.enabled
+                && (settings.relay.tunnel || !named.is_empty());
             if !wanted || tunnel_url().is_some() {
                 if sleep_interruptible(&quit, Duration::from_secs(5)) {
                     return;
                 }
                 continue;
             }
-            child = match spawn_cloudflared() {
+            child = match spawn_cloudflared(&named) {
                 Ok(c) => {
                     *TUNNEL_ERROR.lock().unwrap() = None;
+                    if !named.is_empty() && host.is_empty() {
+                        // it will still serve traffic; we just can't display it
+                        *TUNNEL_ERROR.lock().unwrap() = Some(
+                            "named tunnel running — set Custom host to display the link"
+                                .to_string(),
+                        );
+                    }
                     Some(c)
                 }
                 Err(e) => {
@@ -423,6 +434,13 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
                 }
             };
             if let Some(c) = child.as_mut() {
+                if !named.is_empty() && !host.is_empty() {
+                    // named tunnels don't print their hostname; the link is
+                    // whatever you routed DNS to. Set it up front.
+                    let url = format!("https://{host}");
+                    crate::log::write(&format!("relay: named tunnel at {url}"));
+                    *TUNNEL_URL.lock().unwrap() = Some(url);
+                }
                 // Drain BOTH pipes: cloudflared logs (and the quick-tunnel URL)
                 // go to stderr, and an unread pipe would fill up and stall it.
                 let drain_out = c.stdout.take();
@@ -456,10 +474,23 @@ pub fn start(ctx: &AppContext, quit: Arc<AtomicBool>) {
     });
 }
 
-fn spawn_cloudflared() -> std::io::Result<Child> {
+fn spawn_cloudflared(tunnel_name: &str) -> std::io::Result<Child> {
     let mut cmd = Command::new("cloudflared");
-    cmd.args(["tunnel", "--url", "http://127.0.0.1:8999", "--no-autoupdate"])
-        .stdout(Stdio::piped())
+    if tunnel_name.is_empty() {
+        // throwaway quick tunnel: URL rotates every run
+        cmd.args(["tunnel", "--url", "http://127.0.0.1:8999", "--no-autoupdate"]);
+    } else {
+        // customer's own named tunnel with a stable custom domain; credentials
+        // are read from the default ~/.cloudflared config dir
+        cmd.args([
+            "tunnel",
+            "run",
+            "--url",
+            "http://127.0.0.1:8999",
+            tunnel_name,
+        ]);
+    }
+    cmd.stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
     #[cfg(windows)]
@@ -470,6 +501,15 @@ fn spawn_cloudflared() -> std::io::Result<Child> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     cmd.spawn()
+}
+
+/// Forgiving hostname parse: strips scheme + trailing slash.
+fn normalized_host(raw: &str) -> String {
+    raw.trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_lowercase()
 }
 
 /// Consumes one pipe end of a tunnel process until EOF, harvesting a
