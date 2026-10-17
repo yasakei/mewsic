@@ -40,8 +40,3 @@ pub fn local_agent() -> &'static Agent {
     static AGENT: std::sync::OnceLock<Agent> = std::sync::OnceLock::new();
     AGENT.get_or_init(|| build_agent(Duration::from_secs(2)))
 }
-
-pub fn bridge_agent() -> &'static Agent {
-    static AGENT: std::sync::OnceLock<Agent> = std::sync::OnceLock::new();
-    AGENT.get_or_init(|| build_agent(Duration::from_secs(3)))
-}
