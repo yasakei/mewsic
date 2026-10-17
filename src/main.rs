@@ -11,6 +11,7 @@ mod log;
 mod lyrics;
 mod net;
 mod romanize;
+mod relay;
 mod state;
 mod sync;
 mod tui;
@@ -149,6 +150,7 @@ fn run(with_web: bool) {
     install_signal_handlers(&engine);
     engine.spawn_poller();
     engine.spawn_auto_update();
+    relay::start(&ctx, engine.quit().clone());
 
     if interactive {
         if with_web {
@@ -294,6 +296,7 @@ fn background_child() {
     let engine = engine::Engine::new(ctx.clone());
     engine.spawn_poller();
     engine.spawn_auto_update();
+    relay::start(&ctx, engine.quit().clone());
     run_headless(&ctx, &engine, true);
     engine.shutdown();
     crate::log::write("background engine stopped");

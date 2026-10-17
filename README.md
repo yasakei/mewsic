@@ -84,6 +84,15 @@ Your Discord token never touches that file — it's stored in the OS credential
 manager (Keychain / Credential Manager / Secret Service), with a `0600`
 fallback file on systems without a keyring.
 
+### Lyrics relay (experimental)
+
+The panel's **Experiments** card can expose your live song + lyric line as a
+push-only WebSocket at `/song/ws` so other pages can follow along. Enable it
+with "Lyrics relay (WebSocket)", optionally set an access token and a listener
+cap (default 8), and flip on the cloudflared quick tunnel to publish a
+temporary `*.trycloudflare.com` link. Only that one route leaves your machine
+— the token, settings and saves stay behind the local-only panel check.
+
 ### Telemetry
 
 By default mewsic sends one short, anonymous request per run so we can publish

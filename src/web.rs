@@ -10,6 +10,7 @@ use serde_json::json;
 use crate::config::Settings;
 use crate::connector;
 use crate::engine;
+use crate::relay;
 use crate::state::AppContext;
 
 pub const PANEL_PORT: u16 = 8999;
@@ -113,6 +114,14 @@ fn handle(mut stream: TcpStream, ctx: Arc<AppContext>) {
     let mut parts = request_line.split_whitespace();
     let method = parts.next().unwrap_or("GET").to_string();
     let path = parts.next().unwrap_or("/").to_string();
+
+    // The relay WS is the only route meant to be reached through a tunnel, so
+    // it bypasses the local-only host check (it has its own gate) and skips
+    // body parsing — it upgrades the connection instead.
+    if method == "GET" && path.split_once('?').map(|(p, _)| p).unwrap_or(&path) == relay::WS_PATH {
+        crate::relay::handle_ws(ctx, stream, &headers, &path);
+        return;
+    }
 
     if let Some(response) = verify_local_request(&headers) {
         write_response(stream, response);
@@ -250,6 +259,19 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
                     "latest": update.latest,
                     "message": update.message,
                 },
+            });
+            json_response(body.to_string())
+        }
+
+        ("GET", "/api/relay") => {
+            let settings = ctx.settings.read().unwrap().relay.clone();
+            let body = json!({
+                "enabled": settings.enabled,
+                "tunnel": settings.tunnel,
+                "url": crate::relay::tunnel_url(),
+                "clients": crate::relay::clients(),
+                "maxClients": settings.max_clients.clamp(1, 64),
+                "hasToken": !settings.token.is_empty(),
             });
             json_response(body.to_string())
         }

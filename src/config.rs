@@ -54,6 +54,33 @@ impl Source {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RelaySettings {
+    /// Serve the live lyric line as a WebSocket (`/song/ws`) so remote pages
+    /// can follow along. Intended to be exposed via a cloudflared tunnel;
+    /// every other panel route stays local-only.
+    pub enabled: bool,
+    /// Hard cap on concurrent relay clients (the anti-nuke lever).
+    pub max_clients: u16,
+    /// When set, requires `?token=` on the WS handshake.
+    pub token: String,
+    /// Launch `cloudflared tunnel --url http://127.0.0.1:8999` automatically
+    /// (quick tunnels; needs cloudflared on PATH).
+    pub tunnel: bool,
+}
+
+impl Default for RelaySettings {
+    fn default() -> Self {
+        RelaySettings {
+            enabled: false,
+            max_clients: 8,
+            token: String::new(),
+            tunnel: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -66,6 +93,7 @@ pub struct Settings {
     pub timing: TimingSettings,
     pub update: UpdateSettings,
     pub lyrics: LyricsSettings,
+    pub relay: RelaySettings,
     pub usage: UsageSettings,
 }
 
