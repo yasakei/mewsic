@@ -239,6 +239,7 @@ pub struct UpdateSettings {
 #[serde(default)]
 pub struct ExperimentsSettings {
     pub enabled: bool,
+    pub terminal_title: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

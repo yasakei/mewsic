@@ -429,6 +429,8 @@
       <h2>Experiments</h2>
       <div class="row"><label class="lbl" for="relayEnabled">Lyrics relay (WebSocket)</label><div class="grow end"><label class="switch"><input type="checkbox" id="relayEnabled"><span class="track"></span></label></div></div>
       <p class="hint">Push-only feed of the live song + lyric line at /song/ws. Only that route is reachable from outside; token, settings and saves stay local.</p>
+      <div class="row"><label class="lbl" for="expTitle">Terminal title now-playing</label><div class="grow end"><label class="switch"><input type="checkbox" id="expTitle"><span class="track"></span></label></div></div>
+      <p class="hint">The terminal dashboard mirrors song + current lyric line into the window title.</p>
       <div class="row"><label class="lbl" for="relayMax">Max listeners</label><div class="grow end"><input type="number" id="relayMax" min="1" max="64"></div></div>
       <p class="hint">Hard cap on concurrent connections — extra ones get rejected (429).</p>
       <div class="row"><label class="lbl" for="relayToken">Access token</label><div class="grow"><input type="text" id="relayToken" autocomplete="off" spellcheck="false" placeholder="empty = anyone with the link"></div></div>
@@ -541,6 +543,7 @@ function bindSettings() {
   setCheck("autoStart", settings.update.auto_start);
   setCheck("telemetry", settings.usage ? settings.usage.enabled !== false : true);
   setCheck("experiments", settings.experiments ? settings.experiments.enabled === true : false);
+  setCheck("expTitle", settings.experiments ? settings.experiments.terminal_title === true : false);
   const rel = settings.relay || {};
   setCheck("relayEnabled", !!rel.enabled);
   setVal("relayMax", rel.max_clients ?? 8);
@@ -610,7 +613,10 @@ function collectSettings() {
     },
     update: { auto_start: $("autoStart").checked },
     usage: { enabled: $("telemetry").checked },
-    experiments: { enabled: $("experiments").checked },
+    experiments: {
+      enabled: $("experiments").checked,
+      terminal_title: $("expTitle").checked
+    },
     relay: {
       enabled: $("relayEnabled").checked,
       max_clients: clampRelayMax($("relayMax").value),
@@ -895,7 +901,7 @@ async function checkToken() {
   const el = $(id);
   if (el) el.addEventListener("input", () => queueSave());
 });
-["relayEnabled","relayTunnel","relayMax","relayToken","relayTunnelName","relayTunnelHost"].forEach(id => {
+["relayEnabled","relayTunnel","relayMax","relayToken","relayTunnelName","relayTunnelHost","expTitle"].forEach(id => {
   const el = $(id);
   if (el) el.addEventListener("change", () => queueSave());
   if (el) el.addEventListener("input", () => queueSave());

@@ -522,7 +522,7 @@ mod tests {
             PANEL_HTML.contains("class=\"card span2\" aria-label=\"status\""),
             "status card must start full-width so the grid has no hole"
         );
-        for needle in ["id=\"experiments\"", "updateExperimentsVisibility"] {
+        for needle in ["id=\"experiments\"", "id=\"expTitle\"", "updateExperimentsVisibility"] {
             assert!(PANEL_HTML.contains(needle), "panel must expose {needle}");
         }
     }

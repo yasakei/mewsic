@@ -20,6 +20,7 @@ pub const PANEL_URL: &str = "http://localhost:8999";
 type Term = Terminal<CrosstermBackend<std::io::Stdout>>;
 
 static TERMINAL: Mutex<Option<Term>> = Mutex::new(None);
+static LAST_TITLE: Mutex<String> = Mutex::new(String::new());
 
 pub fn stdout_is_tty() -> bool {
     std::io::stdout().is_terminal()
@@ -1251,20 +1252,41 @@ pub fn run_settings_editor(ctx: &AppContext) -> Option<()> {
             }
             "9" | "experiments" | "labs" => {
                 let mut scr = Screen::new("Experiments");
+                scr.push(Line::from(cyan_bold("Available experiments:")));
+                scr.blank();
+                scr.push(Line::from(vec![
+                    cyan_bold("  relay"),
+                    Span::raw("  — lyrics relay (web panel)"),
+                ]));
                 scr.push(Line::from(dim(
-                    "Experimental extras. Right now that's the lyrics relay: a push-only",
+                    "     Push-only WebSocket feed of the live song + lyric line,",
                 )));
                 scr.push(Line::from(dim(
-                    "WebSocket feed of the live song + lyric line, served by the web",
+                    "     served by the web panel at /song/ws.",
                 )));
-                scr.push(Line::from(dim("panel at /song/ws.")));
+                scr.blank();
+                scr.push(Line::from(vec![
+                    cyan_bold("  title"),
+                    Span::raw("  — terminal title now-playing"),
+                ]));
+                scr.push(Line::from(dim(
+                    "     The dashboard mirrors song + current lyric line into",
+                )));
+                scr.push(Line::from(dim(
+                    "     your terminal's window title.",
+                )));
                 scr.blank();
                 scr.push(Line::from(dim(
-                    "When enabled, the Experiments card appears in the web panel.",
+                    "Enabling experiments reveals the Experiments card in the web panel.",
                 )));
                 scr.blank();
                 settings.experiments.enabled =
                     prompt_confirm(&scr, "Enable experiments?", settings.experiments.enabled)?;
+                settings.experiments.terminal_title = prompt_confirm(
+                    &scr,
+                    "Show song + lyric line in the terminal title?",
+                    settings.experiments.terminal_title,
+                )?;
             }
             _ => {
                 let mut scr = Screen::new("Settings editor");
@@ -1299,6 +1321,23 @@ fn info_row(label: &str, value: &str) -> Line<'static> {
     ])
 }
 
+fn update_terminal_title(settings: &crate::config::Settings, title: &str) {
+    if !settings.experiments.terminal_title {
+        return;
+    }
+    if LAST_TITLE.lock().unwrap().as_str() == title {
+        return;
+    }
+    if crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::SetTitle(title.to_string())
+    )
+    .is_ok()
+    {
+        *LAST_TITLE.lock().unwrap() = title.to_string();
+    }
+}
+
 pub fn render_dashboard(ctx: &AppContext) {
     let pb = engine::snapshot(ctx);
     let latency = engine::last_latency(ctx);
@@ -1328,6 +1367,10 @@ pub fn render_dashboard(ctx: &AppContext) {
         0.0
     };
     let playing = if pb.is_playing { "▶" } else { "⏸" };
+    update_terminal_title(
+        &settings,
+        &format!("♪ {song} — {artist} · {lyrics}"),
+    );
     let emoji = if settings.view.emoji.is_empty() {
         String::new()
     } else {
