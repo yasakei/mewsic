@@ -274,6 +274,13 @@ fn route(method: &str, path: &str, body: &[u8], ctx: &Arc<AppContext>) -> Respon
                             new_settings.token = ctx.settings.read().unwrap().token.clone();
                         }
                     }
+                    // The panel builds its payload from scratch and has no
+                    // bridge fields, so an untouched section here means it was
+                    // never in the request — keep the stored config rather
+                    // than silently disabling the bridge on every save.
+                    if raw.get("bridge").is_none() {
+                        new_settings.bridge = ctx.settings.read().unwrap().bridge.clone();
+                    }
                 }
                 {
                     let mut settings = ctx.settings.write().unwrap();

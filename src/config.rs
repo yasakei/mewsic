@@ -54,6 +54,27 @@ impl Source {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BridgeSettings {
+    /// Push the now-playing + current lyric line to a web API.
+    pub enabled: bool,
+    /// Destination that accepts POST /now-playing/state with the secret header.
+    pub url: String,
+    /// Sent as the `X-Bridge-Secret` header.
+    pub secret: String,
+}
+
+impl Default for BridgeSettings {
+    fn default() -> Self {
+        BridgeSettings {
+            enabled: false,
+            url: "https://api.yasakei.dev/now-playing/state".to_string(),
+            secret: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -66,6 +87,7 @@ pub struct Settings {
     pub timing: TimingSettings,
     pub update: UpdateSettings,
     pub lyrics: LyricsSettings,
+    pub bridge: BridgeSettings,
     pub usage: UsageSettings,
 }
 

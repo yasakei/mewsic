@@ -6,8 +6,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::connector::{self, FetchError};
 use crate::lyrics::LyricsFetcher;
+use crate::net;
 use crate::state::AppContext;
 use crate::sync::build_status;
+
+// The web bridge re-posts even when nothing changed, so a stale server never
+// keeps serving an old line past its own freshness window.
+const BRIDGE_KEEPALIVE_MS: u64 = 5_000;
 
 const DEFAULT_LASTFM_LAG_MS: u64 = 3_000;
 const STATUS_KEEPALIVE_INTERVAL_MS: u64 =
@@ -273,6 +278,47 @@ impl Engine {
                     break;
                 }
                 crate::update::run_update(&ctx, false);
+            }
+        });
+    }
+
+    /// Web bridge: pushes the current playback + lyric line to the configured
+    /// API so remote pages (the site's now-playing card) can display the same
+    /// line the Discord status shows. Disabled unless settings.bridge.enabled.
+    pub fn spawn_bridge(&self) {
+        let ctx = self.ctx.clone();
+        let quit = self.quit.clone();
+        thread::spawn(move || {
+            // Composite fingerprint of what last went out; a new song, new
+            // line, or play/pause flips it and triggers a post.
+            let mut last_fingerprint = String::new();
+            let mut last_post = Instant::now()
+                .checked_sub(Duration::from_secs(60))
+                .unwrap_or_else(Instant::now);
+            loop {
+                let settings = ctx.settings.read().unwrap().clone();
+                if !settings.bridge.enabled || settings.bridge.url.is_empty() {
+                    if sleep_until_quit(&quit, Duration::from_secs(5)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                let payload = bridge_payload(&ctx);
+                let fingerprint = format!(
+                    "{}|{}|{}|{}|{}",
+                    payload.song, payload.line, payload.playing, payload.duration, payload.progress / 1000
+                );
+                if fingerprint != last_fingerprint
+                    || last_post.elapsed() >= Duration::from_millis(BRIDGE_KEEPALIVE_MS)
+                {
+                    last_fingerprint = fingerprint;
+                    last_post = Instant::now();
+                    post_bridge(&settings.bridge, &payload);
+                }
+                if sleep_until_quit(&quit, Duration::from_millis(500)) {
+                    break;
+                }
             }
         });
     }
@@ -651,6 +697,66 @@ fn playing_edge_to_pause(ctx: &AppContext) -> bool {
     let edge = tracker.prev_playing && !playing;
     tracker.prev_playing = playing;
     edge
+}
+
+/// Snapshot of the panel /api/state shape, for the web bridge.
+struct BridgePayload {
+    song: String,
+    artist: String,
+    playing: bool,
+    progress: u64,
+    duration: u64,
+    line: String,
+    has_lyrics: bool,
+    source: String,
+    latency: u64,
+    autooffset: u64,
+}
+
+fn bridge_payload(ctx: &AppContext) -> BridgePayload {
+    let pb = ctx.shared.playback.lock().unwrap();
+    BridgePayload {
+        song: pb.song_name.clone(),
+        artist: pb.song_author.clone(),
+        playing: pb.is_playing,
+        progress: pb.song_progress,
+        duration: pb.song_duration,
+        line: pb
+            .current_line
+            .as_ref()
+            .map(|l| l.text.clone())
+            .unwrap_or_default(),
+        has_lyrics: pb.has_lyrics,
+        source: last_source(ctx),
+        latency: last_latency(ctx),
+        autooffset: ctx.shared.tracker.lock().unwrap().avg_latency(),
+    }
+}
+
+fn post_bridge(bridge: &crate::config::BridgeSettings, pb: &BridgePayload) {
+    let body = serde_json::json!({
+        "song": pb.song,
+        "artist": pb.artist,
+        "playing": pb.playing,
+        "progress": pb.progress,
+        "duration": pb.duration,
+        "line": pb.line,
+        "hasLyrics": pb.has_lyrics,
+        "source": pb.source,
+        "latency": pb.latency,
+        "autooffset": pb.autooffset,
+    });
+    let result = net::bridge_agent()
+        .post(&bridge.url)
+        .set("X-Bridge-Secret", &bridge.secret)
+        .set("Content-Type", "application/json")
+        .timeout(Duration::from_secs(3))
+        .send_string(&body.to_string());
+    // Silent failures are fine: the server's freshness window drops stale
+    // lyrics, so a dropped post just skips one line update.
+    if let Err(e) = result {
+        crate::log::write(&format!("bridge post failed: {e}"));
+    }
 }
 
 #[cfg(test)]
