@@ -91,8 +91,7 @@ mod tests {
     use crate::state::Playback;
 
     #[test]
-    fn build_status_romanizes_when_enabled() {
-        let mut settings = Settings::default();
+    fn build_status_romanizes_when_enabled() {        let mut settings = Settings::default();
         settings.view.label = true;
         let line = LyricsLine {
             time: 62_500,
@@ -134,5 +133,29 @@ mod tests {
         };
         let (text, _) = build_status(&settings, &Playback::default(), &line);
         assert_eq!(text.chars().count(), MAX_STATUS_LENGTH);
+    }
+
+    #[test]
+    fn render_template_stays_unicode_safe_and_swaps_musical_notes() {
+        let playback = Playback {
+            song_name: "空のMeteor - feat. 猫".to_string(),
+            song_author: "夜Light".to_string(),
+            ..Playback::default()
+        };
+        let line = LyricsLine {
+            time: 65_000,
+            text: "消えないで🎵".to_string(),
+        };
+        let template = "{timestamp} | {song_name_cropped} — {lyrics} ♪";
+        let mut settings = Settings::default();
+        settings.view.advanced.enabled = true;
+        settings.view.advanced.template = template.to_string();
+
+        let (text, _) = build_status(&settings, &playback, &line);
+        assert_eq!(
+            text,
+            "1:05 | 空のMeteor — 消えないで🎵 🎶",
+            "cropped cuts before ' -', notes become 🎶, no panic on multibyte"
+        );
     }
 }

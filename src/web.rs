@@ -452,4 +452,200 @@ mod tests {
         ];
         assert!(verify_local_request(&other_spelling).is_none());
     }
+
+    #[test]
+    fn foreign_tunnel_and_lan_hosts_are_not_local() {
+        for host in [
+            "lyrics.yasakei.dev",
+            "lyrics.yasakei.dev:443",
+            "example.com",
+            "10.0.0.23",
+            "192.168.1.10:8999",
+            "",
+        ] {
+            assert!(
+                !host_is_local(host),
+                "{host:?} must not count as localhost"
+            );
+        }
+        for host in ["127.0.0.1", "127.0.0.1:8999", "localhost", "localhost:8999", "[::1]:8999", "::1"] {
+            assert!(host_is_local(host), "{host:?} must count as localhost");
+        }
+    }
+
+    #[test]
+    fn relay_status_route_reports_state() {
+        use crate::config::RelaySettings;
+        let ctx = crate::relay::tests::test_ctx(RelaySettings {
+            enabled: true,
+            max_clients: 3,
+            token: "t".to_string(),
+            tunnel: false,
+            tunnel_name: String::new(),
+            tunnel_host: String::new(),
+        });
+        let response = route("GET", "/api/relay", &[], &ctx);
+        assert_eq!(response.status, 200);
+        let v: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+        assert_eq!(v["enabled"], true);
+        assert_eq!(v["maxClients"], 3);
+        assert_eq!(v["hasToken"], true);
+        assert_eq!(v["clients"], 0);
+        assert_eq!(v["url"], serde_json::Value::Null, "no tunnel up yet");
+    }
+
+    #[test]
+    fn panel_experiments_card_reports_relay_fields() {
+        for needle in [
+            "relayEnabled",
+            "relayMax",
+            "relayToken",
+            "relayTunnel",
+            "relayTunnelName",
+            "relayTunnelHost",
+            "relayLink",
+            "relayMeta",
+            "/api/relay",
+            "pollRelay",
+        ] {
+            assert!(PANEL_HTML.contains(needle), "panel must expose {needle}");
+        }
+    }
+
+    // ── end-to-end: a real loopback WS session through handle() ────────────
+
+    fn make_ctx(relay: crate::config::RelaySettings) -> (AppContext, Arc<std::sync::RwLock<Settings>>) {
+        let settings = Arc::new(std::sync::RwLock::new(Settings {
+            relay,
+            ..Settings::default()
+        }));
+        (
+            AppContext::new(crate::state::Shared::new(), Arc::clone(&settings), std::env::temp_dir()),
+            settings,
+        )
+    }
+
+    /// Read one *server→client* frame (unmasked, FIN set).
+    fn read_ws_frame(r: &mut std::io::BufReader<TcpStream>) -> (u8, Vec<u8>) {
+        let mut h = [0u8; 2];
+        r.read_exact(&mut h)
+            .expect("server must keep sending frames until close");
+        assert_eq!(h[0] & 0x80, 0x80, "server frames must be final");
+        assert_eq!(h[1] & 0x80, 0, "server→client frames must be unmasked");
+        let len = match h[1] & 0x7F {
+            126 => {
+                let mut b = [0u8; 2];
+                r.read_exact(&mut b).unwrap();
+                u16::from_be_bytes(b) as usize
+            }
+            127 => panic!("tests never send 64-bit-length frames"),
+            n => n as usize,
+        };
+        let mut payload = vec![0u8; len];
+        r.read_exact(&mut payload).unwrap();
+        (h[0] & 0x0F, payload)
+    }
+
+    /// Send one client frame — masked, as browsers must.
+    fn send_client_frame(c: &TcpStream, opcode: u8, payload: &[u8]) {
+        let mut c = c;
+        let mask = [0x11, 0x99, 0xC3, 0x7E];
+        let mut out = vec![0x80 | opcode, 0x80 | payload.len() as u8];
+        out.extend_from_slice(&mask);
+        out.extend(
+            payload
+                .iter()
+                .enumerate()
+                .map(|(i, b)| b ^ mask[i % mask.len()]),
+        );
+        c.write_all(&out).unwrap();
+    }
+
+    /// Send a request, read the status line + head; returns (status, head, rest-reader).
+    fn request_and_read_head(addr: std::net::SocketAddr, req: &str) -> (String, String, std::io::BufReader<TcpStream>) {
+        let mut c = TcpStream::connect(addr).unwrap();
+        c.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        c.write_all(req.as_bytes()).unwrap();
+        let mut r = std::io::BufReader::new(c);
+        let mut status = String::new();
+        r.read_line(&mut status).unwrap();
+        let mut head = String::new();
+        loop {
+            let mut line = String::new();
+            r.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            head.push_str(&line);
+        }
+        (status, head, r)
+    }
+
+    #[test]
+    fn relay_ws_end_to_end_over_loopback() {
+        use crate::relay::tests::CLIENT_SERIALIZER;
+        let _guard = CLIENT_SERIALIZER.lock().unwrap();
+        let (ctx, settings) = make_ctx(crate::config::RelaySettings::default());
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let ctx = Arc::new(ctx);
+        let server_ctx = Arc::clone(&ctx);
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let stream = match stream {
+                    Ok(s) => s,
+                    Err(_) => return,
+                };
+                let conn_ctx = Arc::clone(&server_ctx);
+                thread::spawn(move || handle(stream, conn_ctx));
+            }
+        });
+
+        // 1. relay disabled + NON-LOCAL host (like a tunnel traversal): must
+        //    bypass the local-host check (404 from the gate, not 403 host)
+        let req = "GET /song/ws HTTP/1.1\r\nHost: lyrics.yasakei.dev\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+        let (status, _head, mut r) = request_and_read_head(addr, req);
+        assert!(status.starts_with("HTTP/1.1 404"), "got {status}");
+        let mut body = String::new();
+        std::io::Read::read_to_string(&mut r, &mut body).unwrap();
+        assert_eq!(body, "relay disabled");
+
+        // 2. enable the relay live and reconnect through a tunnel-style host
+        settings.write().unwrap().relay.enabled = true;
+        let (status, head, mut r) = request_and_read_head(addr, req);
+        assert!(status.starts_with("HTTP/1.1 101"), "got {status}");
+        assert!(
+            head.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="),
+            "handshake must echo the RFC accept key"
+        );
+        assert!(head.contains("Upgrade: websocket"));
+
+        // 3. first push: the current snapshot arrives as a JSON text frame
+        let (op, payload) = read_ws_frame(&mut r);
+        assert_eq!(op, 0x1);
+        let first: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+        assert!(first.get("song").is_some(), "snapshot shape: {first}");
+        assert!(first["ts"].as_u64().unwrap() > 0);
+
+        // 4. client ping → server pong, unmasked payload preserved
+        send_client_frame(r.get_mut(), 0x9, b"hit");
+        let (op, pong) = read_ws_frame(&mut r);
+        assert_eq!(op, 0xA, "server must answer pings with pongs");
+        assert_eq!(pong, b"hit");
+
+        // 5. flood: over the inbound rate cap → server closes with 1000
+        for _ in 0..9 {
+            send_client_frame(r.get_mut(), 0x1, b"x");
+        }
+        let (op, closed) = read_ws_frame(&mut r);
+        assert_eq!(op, 0x8, "rate offender must get a close frame");
+        assert_eq!(
+            closed,
+            [0x03, 0xE8],
+            "close payload 1000 (a misbehaving client can't amp up)"
+        );
+        drop(r);
+    }
 }
+

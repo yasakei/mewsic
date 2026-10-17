@@ -154,5 +154,31 @@ mod tests {
     #[test]
     fn sanitize() {
         assert_eq!(sanitize_filename("A/B:C"), "A_B_C");
+        assert_eq!(
+            sanitize_filename("../../etc/passwd"),
+            ".._.._etc_passwd",
+            "only separators/meta die; dots are legal in filenames"
+        );
+        assert_eq!(sanitize_filename("Ke$ha"), "Ke_ha");
+    }
+
+    #[test]
+    fn crop_is_char_boundary_safe() {
+        assert_eq!(crop("楽しい", 2), "楽し");
+        assert_eq!(crop("楽しい", 99), "楽しい", "over-cropping is not an error");
+        assert_eq!(crop("abcdef", 0), "");
+        assert_eq!(crop("空蝉🎵", 3), "空蝉🎵", "emoji stays intact");
+    }
+
+    #[test]
+    fn url_encoding_handles_multibyte_and_reserved() {
+        assert_eq!(urlencode("a b&cあ"), "a%20b%26c%E3%81%82");
+        assert_eq!(urlencode("+-._~"), "%2B-._~", "RFC 3986 unreserved set stays; + does not");
+    }
+
+    #[test]
+    fn letters_only_strips_only_quoting_noise() {
+        assert_eq!(letters_only("it's, \"fine.\""), "its fine");
     }
 }
+

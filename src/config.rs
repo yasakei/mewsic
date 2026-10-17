@@ -580,4 +580,31 @@ mod tests {
 
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn relay_block_parses_and_defaults_off() {
+        let s: Settings = toml::from_str("").unwrap();
+        assert!(!s.relay.enabled, "relay must default off");
+        assert_eq!(s.relay.max_clients, 8);
+        assert!(s.relay.token.is_empty());
+
+        let s: Settings = toml::from_str(
+            r#"
+            [relay]
+            enabled = true
+            max_clients = 3
+            token = "t"
+            tunnel = true
+            tunnel_name = "mewsic-relay"
+            tunnel_host = "lyrics.yasakei.dev"
+        "#,
+        )
+        .unwrap();
+        assert!(s.relay.enabled);
+        assert_eq!(s.relay.max_clients, 3);
+        assert_eq!(s.relay.token, "t");
+        assert!(s.relay.tunnel);
+        assert_eq!(s.relay.tunnel_name, "mewsic-relay");
+        assert_eq!(s.relay.tunnel_host, "lyrics.yasakei.dev");
+    }
 }

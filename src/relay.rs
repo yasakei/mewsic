@@ -150,12 +150,16 @@ fn read_frame(reader: &mut impl Read) -> std::io::Result<Option<(u8, Vec<u8>)>> 
         ));
     }
     let mut payload = vec![0u8; len as usize];
+    // RFC 6455: the masking key comes after the extended length and before
+    // the payload.
+    let mut key = [0u8; 4];
+    if masked {
+        reader.read_exact(&mut key)?;
+    }
     if len > 0 {
         reader.read_exact(&mut payload)?;
     }
     if masked {
-        let mut key = [0u8; 4];
-        reader.read_exact(&mut key)?;
         for (i, byte) in payload.iter_mut().enumerate() {
             *byte ^= key[i % 4];
         }
@@ -559,8 +563,29 @@ fn sleep_interruptible(quit: &AtomicBool, d: Duration) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use crate::config::{RelaySettings, Settings};
+    use crate::state::{AppContext, Shared};
+    use std::io::Cursor;
+    use std::sync::{Arc, RwLock};
+
+    /// Client-cap counting and the WS end-to-end test in web.rs both touch the
+    /// same global CLIENTS counter; tests run in parallel in one binary, so
+    /// these tests take this lock to stay deterministic.
+    pub(crate) static CLIENT_SERIALIZER: Mutex<()> = Mutex::new(());
+
+    pub(crate) fn test_ctx(relay: RelaySettings) -> Arc<AppContext> {
+        let settings = Settings {
+            relay,
+            ..Settings::default()
+        };
+        Arc::new(AppContext::new(
+            Shared::new(),
+            Arc::new(RwLock::new(settings)),
+            std::env::temp_dir(),
+        ))
+    }
 
     /// RFC 6455 §1.3 worked example.
     #[test]
@@ -594,5 +619,181 @@ mod tests {
         let a = fingerprint(r#"{"song":"s","line":"l","playing":true,"duration":100,"progress":1200}"#);
         let b = fingerprint(r#"{"song":"s","line":"l","playing":true,"duration":100,"progress":1600}"#);
         assert_eq!(a, b, "subsecond progress must not retrigger pushes");
+    }
+
+    #[test]
+    fn fingerprint_changes_on_line_play_and_song() {
+        let base = r#"{"song":"a","line":"l","playing":false,"duration":100,"progress":0}"#;
+        assert_ne!(fingerprint(String::from(base).as_str()), fingerprint(r#"{"song":"a","line":"l2","playing":false,"duration":100,"progress":0}"#));
+        assert_ne!(fingerprint(base), fingerprint(r#"{"song":"b","line":"l","playing":false,"duration":100,"progress":0}"#));
+        assert_ne!(fingerprint(base), fingerprint(r#"{"song":"a","line":"l","playing":true,"duration":100,"progress":0}"#));
+        // duration change alone is a state change too
+        assert_ne!(fingerprint(base), fingerprint(r#"{"song":"a","line":"l","playing":false,"duration":200,"progress":0}"#));
+    }
+
+    #[test]
+    fn gate_checks_disabled_then_token_in_order() {
+        let _guard = CLIENT_SERIALIZER.lock().unwrap();
+        let disabled = test_ctx(RelaySettings::default());
+        assert_eq!(gate(&disabled, None).unwrap_err(), (404, "relay disabled"));
+
+        let guarded = test_ctx(RelaySettings {
+            enabled: true,
+            token: "secret".to_string(),
+            ..RelaySettings::default()
+        });
+        assert_eq!(gate(&guarded, None).unwrap_err(), (401, "invalid token"));
+        assert_eq!(
+            gate(&guarded, Some("token=wrong")).unwrap_err(),
+            (401, "invalid token")
+        );
+        assert!(
+            gate(&guarded, Some("a=1&token=secret")).is_ok(),
+            "token must be found among other params"
+        );
+        CLIENTS.fetch_sub(1, Ordering::SeqCst);
+
+        let open = test_ctx(RelaySettings {
+            enabled: true,
+            ..RelaySettings::default()
+        });
+        assert!(gate(&open, None).is_ok(), "open relay connects without token");
+        CLIENTS.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn gate_enforces_concurrent_client_cap() {
+        let _guard = CLIENT_SERIALIZER.lock().unwrap();
+        let ctx = test_ctx(RelaySettings {
+            enabled: true,
+            max_clients: 2,
+            ..RelaySettings::default()
+        });
+        gate(&ctx, None).unwrap();
+        gate(&ctx, None).unwrap();
+        assert_eq!(
+            gate(&ctx, None).unwrap_err(),
+            (429, "connection limit"),
+            "third client must be rejected at the cap"
+        );
+        CLIENTS.fetch_sub(1, Ordering::SeqCst);
+        CLIENTS.fetch_sub(1, Ordering::SeqCst);
+        assert!(gate(&ctx, None).is_ok(), "slot frees up after a leave");
+        CLIENTS.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn gate_caps_max_clients_at_64() {
+        let _guard = CLIENT_SERIALIZER.lock().unwrap();
+        let ctx = test_ctx(RelaySettings {
+            enabled: true,
+            max_clients: u16::MAX,
+            ..RelaySettings::default()
+        });
+        assert!(gate(&ctx, None).is_ok());
+        CLIENTS.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn normalized_host_strips_scheme_case_and_slashes() {
+        assert_eq!(normalized_host("https://LYRICS.Yasakei.dev/"), "lyrics.yasakei.dev");
+        assert_eq!(normalized_host("http://relay.example.com"), "relay.example.com");
+        assert_eq!(normalized_host("  plain.host  "), "plain.host");
+    }
+
+    #[test]
+    fn frames_masked_roundtrip_unmasks_client_payloads() {
+        let payload: Vec<u8> = (0..300u32).map(|i| (i & 0xFF) as u8).collect();
+        let mut frame = vec![0x81, 0x80 | 126];
+        frame.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+        let mask = [0x1f, 0x2f, 0x3f, 0x4f];
+        frame.extend_from_slice(&mask);
+        frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+        match read_frame(&mut frame.as_slice()) {
+            Ok(Some((op, out))) => {
+                assert_eq!(op, 0x1, "opcode must survive");
+                assert_eq!(out, payload, "client frames must unmask");
+            }
+            other => panic!("expected frame, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn frames_reject_oversized_and_fragmented() {
+        // 5000-byte payload claim > 4 KiB cap → error before payload read
+        let mut big = vec![0x81, 127];
+        big.extend_from_slice(&5000u64.to_be_bytes());
+        assert!(read_frame(&mut big.as_slice()).is_err());
+
+        // FIN bit unset → fragmentation is not supported
+        let fragment = vec![0x01, 0x82, 0, 0, 0, 0b1000_0001, 0, 0, 0, 0b0110_0001];
+        assert!(read_frame(&mut fragment.as_slice()).is_err());
+    }
+
+    #[test]
+    fn frames_treat_reset_as_clean_goodbye() {
+        // a socket that resets mid-frame maps to Ok(None), not an error, so
+        // the reader thread treats it as a leave
+        struct Reset;
+        impl Read for Reset {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset,
+                    "reset",
+                ))
+            }
+        }
+        assert!(matches!(read_frame(&mut Reset), Ok(None)));
+    }
+
+    #[test]
+    fn scan_stream_harvests_quick_tunnel_url_from_logs() {
+        let saved = tunnel_url();
+        let log = "\
+2025-10-17T09:00:00Z INF +--------------------------------------------------------------------------------------------+
+2025-10-17T09:00:00Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+2025-10-17T09:00:00Z INF |  https://fuzzy-kitten-15b3a2d4.trycloudflare.com                                           |
+2025-10-17T09:00:00Z INF +--------------------------------------------------------------------------------------------+
+2025-10-17T09:00:00Z INF Registered tunnel connection";
+        scan_stream(Cursor::new(log.to_string().into_bytes()));
+        assert_eq!(
+            tunnel_url().as_deref(),
+            Some("https://fuzzy-kitten-15b3a2d4.trycloudflare.com"),
+            "URL must be trimmed of the box borders and trailing spaces"
+        );
+        // a stream without a URL must not clear the harvested one
+        scan_stream(Cursor::new("no urls here".as_bytes().to_vec()));
+        assert!(tunnel_url().is_some());
+        // restore global state for other tests
+        *TUNNEL_URL.lock().unwrap() = saved;
+    }
+
+    #[test]
+    fn snapshot_json_mirrors_playback_state() {
+        let ctx = test_ctx(RelaySettings::default());
+        {
+            let mut pb = ctx.shared.playback.lock().unwrap();
+            pb.song_name = "Love Me Not".to_string();
+            pb.song_author = "Ravyn Lenae".to_string();
+            pb.is_playing = true;
+            pb.song_progress = 175_000;
+            pb.song_duration = 213_000;
+            pb.has_lyrics = true;
+            pb.current_line = Some(crate::state::LyricsLine {
+                time: 1500,
+                text: "All this time I'm thinking".to_string(),
+            });
+        }
+        *ctx.shared.lyric_source.lock().unwrap() = "Spotify".to_string();
+        let v: serde_json::Value = serde_json::from_str(&snapshot_json(&ctx)).unwrap();
+        assert_eq!(v["song"], "Love Me Not");
+        assert_eq!(v["artist"], "Ravyn Lenae");
+        assert_eq!(v["playing"], true);
+        assert_eq!(v["progress"], 175_000);
+        assert_eq!(v["duration"], 213_000);
+        assert_eq!(v["line"], "All this time I'm thinking");
+        assert_eq!(v["hasLyrics"], true);
+        assert_eq!(v["source"], "Spotify");
+        assert!(v["ts"].as_u64().unwrap() > 0, "snapshot must be timestamped");
     }
 }
