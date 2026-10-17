@@ -475,8 +475,7 @@ pub fn choose_startup_mode() -> StartupMode {
     }
 }
 
-pub fn show_web_panel_hint(panel_ready: bool) {
-    let mut screen = Screen::new("Web panel");
+pub fn show_web_panel_hint(panel_ready: bool) {    let mut screen = Screen::new("Web panel");
     screen.blank();
     if panel_ready {
         screen.push(Line::from(green(&format!(
@@ -494,6 +493,25 @@ pub fn show_web_panel_hint(panel_ready: bool) {
         )));
     }
     let _ = prompt_continue(&screen);
+}
+
+/// Ctrl+B: start the panel and open it, or explain the failure in a proper
+/// TUI screen (never via eprintln — that would smear over the live render).
+fn toggle_web_panel(ctx: &AppContext) {
+    if crate::web::start(ctx) {
+        crate::web::open_browser();
+        return;
+    }
+    let mut s = Screen::new("Web panel");
+    s.blank();
+    s.push(Line::from(red(
+        "Could not start the web panel — port 8999 is already in use.",
+    )));
+    s.blank();
+    s.push(Line::from(dim(
+        "Another mewsic instance is probably holding it. Details are in the log.",
+    )));
+    let _ = prompt_continue(&s);
 }
 
 pub fn run_setup_wizard(ctx: &AppContext) -> Option<()> {
@@ -1455,9 +1473,8 @@ fn poll_remote_shortcut(ctx: &AppContext) -> bool {
                 }
                 if matches!(k.code, KeyCode::Char('b') | KeyCode::Char('B'))
                     && k.modifiers.contains(KeyModifiers::CONTROL)
-                    && crate::web::start(ctx)
                 {
-                    crate::web::open_browser();
+                    toggle_web_panel(ctx);
                 }
                 false
             }
@@ -1498,10 +1515,9 @@ pub fn poll_shortcut(ctx: &AppContext) -> bool {
                             let _ = run_settings_editor(ctx);
                         }
                         KeyCode::Char('b') | KeyCode::Char('B')
-                            if k.modifiers.contains(KeyModifiers::CONTROL)
-                                && crate::web::start(ctx) =>
+                            if k.modifiers.contains(KeyModifiers::CONTROL) =>
                         {
-                            crate::web::open_browser();
+                            toggle_web_panel(ctx);
                         }
                         _ => {}
                     }

@@ -65,8 +65,10 @@ pub fn start(ctx: &AppContext) -> bool {
         Ok(listener) => listener,
         Err(e) => {
             RUNNING.store(false, Ordering::SeqCst);
+            // Never print to the terminal here: a live TUI screen would get
+            // garbled. The TUI surfaces the failure; other callers check the
+            // return value or the log.
             crate::log::write(&format!("panel server error: {e}"));
-            eprintln!("could not start web panel at {PANEL_URL}: {e}");
             return false;
         }
     };
